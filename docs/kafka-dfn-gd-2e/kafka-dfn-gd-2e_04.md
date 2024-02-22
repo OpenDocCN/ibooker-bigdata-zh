@@ -28,43 +28,11 @@ Kafka 已经广泛测试了稳定的 ZooKeeper 3.5 版本，并定期更新以�
 
 ZooKeeper 附带一个基本示例配置文件，对于大多数用例来说都可以正常工作，位于*/usr/local/zookeeper/config/zoo_sample.cfg*。但是，为了演示目的，我们将在本书中手动创建一些基本设置的配置文件。以下示例在*/usr/local/zookeeper*中使用基本配置安装 ZooKeeper，并将其数据存储在*/var/lib/zookeeper*中：
 
-```java
-# tar -zxf apache-zookeeper-3.5.9-bin.tar.gz
-# mv apache-zookeeper-3.5.9-bin /usr/local/zookeeper
-# mkdir -p /var/lib/zookeeper
-# cp > /usr/local/zookeeper/conf/zoo.cfg << EOF
-> tickTime=2000
-> dataDir=/var/lib/zookeeper
-> clientPort=2181
-> EOF
-# export JAVA_HOME=/usr/java/jdk-11.0.10
-# /usr/local/zookeeper/bin/zkServer.sh start
-JMX enabled by default
-Using config: /usr/local/zookeeper/bin/../conf/zoo.cfg
-Starting zookeeper ... STARTED
-#
-```
+[PRE0]
 
 您现在可以通过连接到客户端端口并发送四字命令`srvr`来验证 ZooKeeper 是否在独立模式下正确运行。这将从运行的服务器返回基本的 ZooKeeper 信息：
 
-```java
-# telnet localhost 2181
-Trying 127.0.0.1...
-Connected to localhost.
-Escape character is '^]'.
-srvr
-Zookeeper version: 3.5.9-83df9301aa5c2a5d284a9940177808c01bc35cef, built on 01/06/2021 19:49 GMT
-Latency min/avg/max: 0/0/0
-Received: 1
-Sent: 0
-Connections: 1
-Outstanding: 0
-Zxid: 0x0
-Mode: standalone
-Node count: 5
-Connection closed by foreign host.
-#
-```
+[PRE1]
 
 ### ZooKeeper 集合
 
@@ -78,16 +46,7 @@ ZooKeeper 被设计为作为一个名为*ensemble*的集群工作，以确保高
 
 要在集群中配置 ZooKeeper 服务器，它们必须有一个列出所有服务器的共同配置，每个服务器在数据目录中需要一个指定服务器 ID 号的*myid*文件。如果集群中的服务器的主机名是`zoo1.example.com`，`zoo2.example.com`和`zoo3.example.com`，配置文件可能如下所示：
 
-```java
-tickTime=2000
-dataDir=/var/lib/zookeeper
-clientPort=2181
-initLimit=20
-syncLimit=5
-server.1=zoo1.example.com:2888:3888
-server.2=zoo2.example.com:2888:3888
-server.3=zoo3.example.com:2888:3888
-```
+[PRE2]
 
 在此配置中，`initLimit`是允许跟随者与领导者连接的时间。`syncLimit`值限制了落后于领导者的跟随者可以有多久。这两个值都是`tickTime`单位的数字，这使得`init​Li⁠mit`为 20×2,000 毫秒，即 40 秒。配置还列出了集群中的每个服务器。服务器以`*server.X=hostname:peerPort:leaderPort*`的格式指定，具有以下参数：
 
@@ -121,53 +80,21 @@ server.3=zoo3.example.com:2888:3888
 
 以下示例在*/usr/local/kafka*中安装 Kafka，配置为使用先前启动的 ZooKeeper 服务器，并将消息日志段存储在*/tmp/kafka-logs*中：
 
-```java
-# tar -zxf kafka_2.13-2.7.0.tgz
-# mv kafka_2.13-2.7.0 /usr/local/kafka
-# mkdir /tmp/kafka-logs
-# export JAVA_HOME=/usr/java/jdk-11.0.10
-# /usr/local/kafka/bin/kafka-server-start.sh -daemon
-/usr/local/kafka/config/server.properties
-#
-```
+[PRE3]
 
 一旦 Kafka 经纪人启动，我们可以通过针对集群执行一些简单操作来验证它是否正常工作：创建一个测试主题，生成一些消息，并消费相同的消息。
 
 创建和验证主题：
 
-```java
-# /usr/local/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --create
---replication-factor 1 --partitions 1 --topic test
-Created topic "test".
-# /usr/local/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092
---describe --topic test
-Topic:test    PartitionCount:1    ReplicationFactor:1    Configs:
- Topic: test    Partition: 0    Leader: 0    Replicas: 0    Isr: 0
-#
-```
+[PRE4]
 
 向测试主题生成消息（使用 Ctrl-C 随时停止生产者）：
 
-```java
-# /usr/local/kafka/bin/kafka-console-producer.sh --bootstrap-server
-localhost:9092 --topic test
-Test Message 1
-Test Message 2
-^C
-#
-```
+[PRE5]
 
 从测试主题消费消息：
 
-```java
-# /usr/local/kafka/bin/kafka-console-consumer.sh --bootstrap-server
-localhost:9092 --topic test --from-beginning
-Test Message 1
-Test Message 2
-^C
-Processed a total of 2 messages
-#
-```
+[PRE6]
 
 # Kafka CLI 实用程序上的 ZooKeeper 连接的弃用
 
@@ -419,15 +346,7 @@ Kafka 集群的适当大小由几个因素决定。通常，您的集群大小�
 
 在选择这些参数的值时，明智的做法是在 Kafka 集群在负载下运行时（无论是在生产环境还是模拟环境下）随时间审查脏页的数量。当前的脏页数量可以通过检查*/proc/vmstat*文件来确定：
 
-```java
-# cat /proc/vmstat | egrep "dirty|writeback"
-nr_dirty 21845
-nr_writeback 0
-nr_writeback_temp 0
-nr_dirty_threshold 32715981
-nr_dirty_background_threshold 2726331
-#
-```
+[PRE7]
 
 Kafka 使用文件描述符来跟踪日志段和打开的连接。如果一个代理有很多分区，那么该代理至少需要*(分区数)*×*(分区大小/段大小)*来跟踪所有日志段，另外还需要跟踪代理建立的连接数。因此，建议根据上述计算将`vm.max_map_count`更新为一个非常大的数字。根据环境的不同，将这个值更改为 400,000 或 600,000 通常是成功的。还建议将`vm.overcommit_memory`设置为 0。将默认值设置为 0 表示内核从应用程序确定空闲内存的数量。如果将属性设置为非零值，可能会导致操作系统获取过多的内存，从而剥夺 Kafka 进行最佳操作所需的内存。这对于具有高摄入速率的应用程序是常见的。
 
@@ -467,16 +386,7 @@ Kafka 代理在利用堆内存和创建垃圾对象的方式上相当高效，�
 
 Kafka 最初发布时 G1GC 收集器尚不可用且不稳定。因此，Kafka 默认使用并发标记和扫描垃圾回收以确保与所有 JVM 的兼容性。新的最佳实践是对于 Java 1.8 及更高版本使用 G1GC。通过环境变量很容易进行更改。使用本章前面的`start`命令，修改如下：
 
-```java
-# export KAFKA_JVM_PERFORMANCE_OPTS="-server -Xmx6g -Xms6g
--XX:MetaspaceSize=96m -XX:+UseG1GC
--XX:MaxGCPauseMillis=20 -XX:InitiatingHeapOccupancyPercent=35
--XX:G1HeapRegionSize=16M -XX:MinMetaspaceFreeRatio=50
--XX:MaxMetaspaceFreeRatio=80 -XX:+ExplicitGCInvokesConcurrent"
-# /usr/local/kafka/bin/kafka-server-start.sh -daemon
-/usr/local/kafka/config/server.properties
-#
-```
+[PRE8]
 
 ## 数据中心布局
 

@@ -350,21 +350,7 @@ Apache Kafka 有两个流 API——低级 Processor API 和高级 Streams DSL。
 
 创建流处理应用程序时的第一件事是配置 Kafka Streams。Kafka Streams 有大量可能的配置，我们在这里不讨论，但你可以在[文档](http://bit.ly/2t7obPU)中找到它们。此外，你可以通过向`Properties`对象添加任何生产者或消费者配置来配置嵌入在 Kafka Streams 中的生产者和消费者：
 
-```java
-public class WordCountExample {
-
-    public static void main(String[] args) throws Exception{
-
-        Properties props = new Properties();
-        props.put(StreamsConfig.APPLICATION_ID_CONFIG,
-          "wordcount"); ①
-        props.put(StreamsConfig.BOOTSTRAP_SERVERS_CONFIG,
-          "localhost:9092"); ②
-        props.put(StreamsConfig.DEFAULT_KEY_SERDE_CLASS_CONFIG,
-          Serdes.String().getClass().getName()); ③
-        props.put(StreamsConfig.DEFAULT_VALUE_SERDE_CLASS_CONFIG,
-          Serdes.String().getClass().getName());
-```
+[PRE0]
 
 ①
 
@@ -380,24 +366,7 @@ Kafka Streams 应用程序总是从 Kafka 主题中读取数据，并将其输�
 
 现在我们有了配置，让我们构建我们的流拓扑：
 
-```java
-StreamsBuilder builder = new StreamsBuilder(); ①
-
-KStream<String, String> source =
-  builder.stream("wordcount-input");
-
-final Pattern pattern = Pattern.compile("\\W+");
-
-KStream<String, String> counts  = source.flatMapValues(value->
-  Arrays.asList(pattern.split(value.toLowerCase()))) ②
-        .map((key, value) -> new KeyValue<String,
-           String>(value, value))
-        .filter((key, value) -> (!value.equals("the"))) ③
-        .groupByKey() ④
-        .count().mapValues(value->
-           Long.toString(value)).toStream();⑤
-counts.to("wordcount-output"); ![6](img/6.png)
-```
+[PRE1]
 
 ①
 
@@ -425,17 +394,7 @@ counts.to("wordcount-output"); ![6](img/6.png)
 
 现在我们已经定义了应用程序将运行的转换流程，我们只需要…运行它：
 
-```java
-KafkaStreams streams = new KafkaStreams(builder.build(), props); ①
-
-streams.start(); ②
-
-// usually the stream application would be running forever,
-// in this example we just let it run for some time and stop
-Thread.sleep(5000L);
-
-streams.close(); ③
-```
+[PRE2]
 
 ①
 
@@ -471,49 +430,17 @@ streams.close(); ③
 
 为了简化起见，我们假设我们的交易所只有 10 个股票代码在交易中。设置和配置与我们在“Word Count”中使用的非常相似。
 
-```java
-Properties props = new Properties();
-props.put(StreamsConfig.APPLICATION_ID_CONFIG, "stockstat");
-props.put(StreamsConfig.BOOTSTRAP_SERVERS_CONFIG, Constants.BROKER);
-props.put(StreamsConfig.DEFAULT_KEY_SERDE_CLASS_CONFIG,
-  Serdes.String().getClass().getName());
-props.put(StreamsConfig.DEFAULT_VALUE_SERDE_CLASS_CONFIG,
-  TradeSerde.class.getName());
-```
+[PRE3]
 
 主要区别在于使用的 Serde 类。在"词频统计"中，我们对键和值都使用了字符串，因此对两者都使用了`Serdes.String()`类作为序列化器和反序列化器。在这个例子中，键仍然是一个字符串，但值是一个包含股票代码、询价和询价大小的`Trade`对象。为了对这个对象进行序列化和反序列化（以及我们在这个小应用程序中使用的其他一些对象），我们使用了谷歌的 Gson 库来从我们的`Java`对象生成 JSON 序列化器和反序列化器。然后我们创建了一个小包装器，从中创建了一个 Serde 对象。这是我们创建 Serde 的方法：
 
-```java
-static public final class TradeSerde extends WrapperSerde<Trade> {
-    public TradeSerde() {
-        super(new JsonSerializer<Trade>(),
-          new JsonDeserializer<Trade>(Trade.class));
-    }
-}
-```
+[PRE4]
 
 没有什么花哨的，但请记住为要存储在 Kafka 中的每个对象提供一个 Serde 对象 - 输入、输出，有时是中间结果。为了使这更容易，我们建议通过类似 Gson、Avro、Protobuf 或类似的库生成这些 Serdes。
 
 现在我们已经配置好了一切，是时候构建我们的拓扑了：
 
-```java
-KStream<Windowed<String>, TradeStats> stats = source
-    .groupByKey() ①
-    .windowedBy(TimeWindows.of(Duration.ofMillis(windowSize))
-                           .advanceBy(Duration.ofSeconds(1))) ②
-    .aggregate( ③
-        () -> new TradeStats(),
-        (k, v, tradestats) -> tradestats.add(v), ④
-        Materialized.<String, TradeStats, WindowStore<Bytes, byte[]>>
-            as("trade-aggregates") ⑤
-           .withValueSerde(new TradeStatsSerde())) ![6](img/6.png)
-    .toStream() ![7](img/7.png)
-    .mapValues((trade) -> trade.computeAvgPrice()); ![8](img/8.png)
-
-stats.to("stockstats-output",
-    Produced.keySerde(
-      WindowedSerdes.timeWindowedSerdeFrom(String.class, windowSize))); ![9](img/9.png)
-```
+[PRE5]
 
 ①
 
@@ -563,43 +490,7 @@ stats.to("stockstats-output",
 
 由于配置应用程序与之前的示例类似，让我们跳过这部分，看看连接多个流的拓扑结构：
 
-```java
-KStream<Integer, PageView> views =
-    builder.stream(Constants.PAGE_VIEW_TOPIC,
-      Consumed.with(Serdes.Integer(), new PageViewSerde())); ①
-KStream<Integer, Search> searches =
-    builder.stream(Constants.SEARCH_TOPIC,
-      Consumed.with(Serdes.Integer(), new SearchSerde()));
-KTable<Integer, UserProfile> profiles =
-    builder.table(Constants.USER_PROFILE_TOPIC,
-      Consumed.with(Serdes.Integer(), new ProfileSerde())); ②
-
-KStream<Integer, UserActivity> viewsWithProfile = views.leftJoin(profiles, ③
-                (page, profile) -> {
-                    if (profile != null)
-                        return new UserActivity(
-                          profile.getUserID(), profile.getUserName(),
-                          profile.getZipcode(), profile.getInterests(),
-                          "", page.getPage()); ④
-                    else
-                       return new UserActivity(
-                         -1, "", "", null, "", page.getPage());
-                    });
-
-KStream<Integer, UserActivity> userActivityKStream =
-    viewsWithProfile.leftJoin(searches, ⑤
-      (userActivity, search) -> {
-          if (search != null)
-              userActivity.updateSearch(search.getSearchTerms()); ![6](img/6.png)
-          else
-              userActivity.updateSearch("");
-          return userActivity;
-      },
-      JoinWindows.of(Duration.ofSeconds(1)).before(Duration.ofSeconds(0)),  ![7](img/7.png)
-                    StreamJoined.with(Serdes.Integer(),  ![8](img/8.png)
-                                      new UserActivitySerde(),
-                                      new SearchSerde()));
-```
+[PRE6]
 
 ① (#co_stream_processing_CO5-1)
 

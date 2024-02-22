@@ -98,19 +98,11 @@ TLS 是公共互联网上最广泛使用的加密协议之一。应用程序协�
 
 用于经纪人间通信的侦听器可以通过配置`inter.broker.listener.name`或`security.inter.broker.protocol`来选择。对于用于经纪人间通信的安全协议，必须在经纪人配置中提供服务器端和客户端端的配置选项。这是因为经纪人需要为该侦听器建立客户端连接。以下示例配置了 SSL 用于经纪人间和内部侦听器，以及 SASL_SSL 用于外部侦听器：
 
-```java
-listeners=EXTERNAL://:9092,INTERNAL://10.0.0.2:9093,BROKER://10.0.0.2:9094
-advertised.listeners=EXTERNAL://broker1.example.com:9092,INTERNAL://broker1.local:9093,BROKER://broker1.local:9094
-listener.security.protocol.map=EXTERNAL:SASL_SSL,INTERNAL:SSL,BROKER:SSL
-inter.broker.listener.name=BROKER
-```
+[PRE0]
 
 客户端配置了安全协议和引导服务器，确定经纪人侦听器。返回给客户端的元数据仅包含与引导服务器相同侦听器对应的端点：
 
-```java
-security.protocol=SASL_SSL
-bootstrap.servers=broker1.example.com:9092,broker2.example.com:9092
-```
+[PRE1]
 
 在下一节中，我们将审查经纪人和客户端针对每种安全协议的特定于协议的配置选项。
 
@@ -148,11 +140,7 @@ SSL 通道是加密的，因此在 CPU 使用方面引入了明显的开销。�
 
 为经纪人生成自签名 CA 密钥对：  
 
-```java
-$keytool-genkeypair-keyalgRSA-keysize2048-keystoreserver.ca.p12\
- -storetype PKCS12 -storepass server-ca-password -keypass server-ca-password  \ -alias ca -dname "CN=BrokerCA" -ext bc=ca:true -validity 365 ①$keytool-export-fileserver.ca.crt-keystoreserver.ca.p12\
- -storetype PKCS12 -storepass server-ca-password -alias ca -rfc ②
-```
+[PRE2]
 
 ①  
 
@@ -164,13 +152,7 @@ $keytool-genkeypair-keyalgRSA-keysize2048-keystoreserver.ca.p12\
 
 使用由自签名 CA 签名的证书为经纪人创建密钥库。如果使用通配符主机名，可以为所有经纪人使用相同的密钥库。否则，为每个经纪人创建一个具有其完全限定域名（FQDN）的密钥库：  
 
-```java
-$keytool-genkey-keyalgRSA-keysize2048-keystoreserver.ks.p12\
- -storepass server-ks-password -keypass server-ks-password -alias server   \ -storetype PKCS12 -dname "CN=Kafka,O=Confluent,C=GB" -validity 365 ①$keytool-certreq-fileserver.csr-keystoreserver.ks.p12-storetypePKCS12\
- -storepass server-ks-password -keypass server-ks-password -alias server ②$keytool-gencert-infileserver.csr-outfileserver.crt\
- -keystore server.ca.p12 -storetype PKCS12 -storepass server-ca-password   \ -alias ca -ext SAN=DNS:broker1.example.com -validity 365 ③$catserver.crtserver.ca.crt>serverchain.crt$keytool-importcert-fileserverchain.crt-keystoreserver.ks.p12\
- -storepass server-ks-password -keypass server-ks-password -alias server   \ -storetype PKCS12 -noprompt ④
-```
+[PRE3]
 
 ①  
 
@@ -190,30 +172,15 @@ $keytool-genkey-keyalgRSA-keysize2048-keystoreserver.ks.p12\
 
 如果 TLS 用于经纪人之间的通信，请为经纪人创建一个信任库，其中包含经纪人的 CA 证书，以使经纪人能够相互进行身份验证：  
 
-```java
-$ keytool -import -file server.ca.crt -keystore server.ts.p12 \
- -storetype PKCS12 -storepass server-ts-password -alias server -noprompt
-```
+[PRE4]
 
 为客户端生成一个信任库，其中包含经纪人的 CA 证书：  
 
-```java
-$ keytool -import -file server.ca.crt -keystore client.ts.p12 \
- -storetype PKCS12 -storepass client-ts-password -alias ca -noprompt
-```
+[PRE5]
 
 如果启用了 TLS 客户端身份验证，则必须为客户端配置密钥存储。以下脚本为客户端生成一个自签名的 CA，并创建一个由客户端 CA 签名的客户端密钥存储。客户端 CA 被添加到经纪人信任存储中，以便经纪人可以验证客户端的真实性：
 
-```java
-#Generateself-signedCAkey-pairforclientskeytool -genkeypair -keyalg RSA -keysize 2048 -keystore client.ca.p12         \
- -storetype PKCS12 -storepass client-ca-password -keypass client-ca-password \ -alias ca -dname CN=ClientCA -ext bc=ca:true -validity 365 ①keytool -export -file client.ca.crt -keystore client.ca.p12  -storetype PKCS12 \
- -storepass client-ca-password -alias ca -rfc #Createkeystoreforclientskeytool -genkey -keyalg RSA -keysize 2048 -keystore client.ks.p12           \
- -storepass client-ks-password -keypass client-ks-password -alias client   \ -storetype PKCS12 -dname "CN=Metrics App,O=Confluent,C=GB" -validity 365 ②keytool -certreq -file client.csr -keystore client.ks.p12 -storetype PKCS12 \
- -storepass client-ks-password -keypass client-ks-password -alias client keytool -gencert -infile client.csr -outfile client.crt                     \
- -keystore client.ca.p12 -storetype PKCS12 -storepass client-ca-password   \ -alias ca -validity 365 cat client.crt client.ca.crt > clientchain.crt keytool -importcert -file clientchain.crt -keystore client.ks.p12           \
- -storepass client-ks-password -keypass client-ks-password -alias client   \ -storetype PKCS12 -noprompt ③#AddclientCAcertificatetobroker'struststorekeytool -import -file client.ca.crt -keystore server.ts.p12 -alias client \
- -storetype PKCS12 -storepass server-ts-password -noprompt ④
-```
+[PRE6]
 
 ①
 
@@ -233,28 +200,11 @@ $ keytool -import -file server.ca.crt -keystore client.ts.p12 \
 
 一旦我们有了密钥和信任存储，我们就可以为经纪人配置 TLS。只有在 TLS 用于经纪人之间的通信或启用了客户端身份验证时，经纪人才需要信任存储：
 
-```java
-ssl.keystore.location=/path/to/server.ks.p12
-ssl.keystore.password=server-ks-password
-ssl.key.password=server-ks-password
-ssl.keystore.type=PKCS12
-ssl.truststore.location=/path/to/server.ts.p12
-ssl.truststore.password=server-ts-password
-ssl.truststore.type=PKCS12
-ssl.client.auth=required
-```
+[PRE7]
 
 客户端配置了生成的信任存储。如果需要客户端身份验证，则应为客户端配置密钥存储。
 
-```java
-ssl.truststore.location=/path/to/client.ts.p12
-ssl.truststore.password=client-ts-password
-ssl.truststore.type=PKCS12
-ssl.keystore.location=/path/to/client.ks.p12
-ssl.keystore.password=client-ks-password
-ssl.key.password=client-ks-password
-ssl.keystore.type=PKCS12
-```
+[PRE8]
 
 # 信任存储
 
@@ -262,12 +212,7 @@ ssl.keystore.type=PKCS12
 
 必须定期更新密钥存储和信任存储，以避免 TLS 握手失败。经纪人 SSL 存储可以通过修改相同的文件或将配置选项设置为新的带版本的文件来动态更新。在这两种情况下，可以使用 Admin API 或 Kafka 配置工具来触发更新。以下示例使用配置工具更新经纪人 ID 为`0`的经纪人的外部侦听器的密钥存储：
 
-```java
-$ bin/kafka-configs.sh --bootstrap-server localhost:9092     \
- --command-config admin.props                               \
- --entity-type brokers --entity-name 0 --alter --add-config \
- 'listener.name.external.ssl.keystore.location=/path/to/server.ks.p12'
-```
+[PRE9]
 
 ### 安全注意事项
 
@@ -317,14 +262,7 @@ Kerberos 是一种广泛使用的网络身份验证协议，使用强加密来�
 
 Kafka 使用 Java 运行时环境中包含的 GSSAPI 安全提供程序来支持使用 Kerberos 进行安全认证。GSSAPI 的 JAAS 配置包括包含主体与其长期密钥的映射的密钥表文件的路径。要为代理配置 GSSAPI，需要为每个代理创建一个包含代理主机名的主体的密钥表。客户端通过验证代理主机名来确保服务器的真实性并防止中间人攻击。Kerberos 在认证期间需要安全的 DNS 服务来查找主机名。在前向和反向查找不匹配的部署中，可以在客户端的 Kerberos 配置文件* krb5.conf *中配置`rdns=false`来禁用反向查找。每个代理的 JAAS 配置应包括 Java 运行时环境中的 Kerberos V5 登录模块，密钥表文件的路径和完整的代理主体：
 
-```java
-sasl.enabled.mechanisms=GSSAPI
-listener.name.external.gssapi.sasl.jaas.config=\ ①
-  com.sun.security.auth.module.Krb5LoginModule required \
-    useKeyTab=true storeKey=true     \
-    keyTab="/path/to/broker1.keytab" \ ②
-    principal="kafka/broker1.example.com@EXAMPLE.COM"; ③
-```
+[PRE10]
 
 ①
 
@@ -340,21 +278,11 @@ listener.name.external.gssapi.sasl.jaas.config=\ ①
 
 如果 SASL/GSSAPI 用于代理间通信，则还应为代理配置代理间 SASL 机制和 Kerberos 服务名称：
 
-```java
-sasl.mechanism.inter.broker.protocol=GSSAPI
-sasl.kerberos.service.name=kafka
-```
+[PRE11]
 
 客户端应在 JAAS 配置和`sasl.kerberos.service.name`中配置自己的密钥表和主体，以指示它们正在连接的服务的名称：
 
-```java
-sasl.mechanism=GSSAPI
-sasl.kerberos.service.name=kafka ①
-sasl.jaas.config=com.sun.security.auth.module.Krb5LoginModule required \
-    useKeyTab=true storeKey=true   \
-    keyTab="/path/to/alice.keytab" \
-    principal="Alice@EXAMPLE.COM"; ②
-```
+[PRE12]
 
 ①
 
@@ -380,15 +308,7 @@ SASL/GSSAPI 需要安全的 DNS 服务进行服务器认证。由于针对 KDC �
 
 SASL/PLAIN 的默认实现使用经纪人的 JAAS 配置作为密码存储。所有客户端用户名和密码都包括在登录选项中，经纪人验证客户端在认证期间提供的密码是否与这些条目中的一个匹配。只有在用于经纪人间通信的 SASL/PLAIN 时才需要经纪人用户名和密码：
 
-```java
-sasl.enabled.mechanisms=PLAIN
-sasl.mechanism.inter.broker.protocol=PLAIN
-listener.name.external.plain.sasl.jaas.config=\
-  org.apache.kafka.common.security.plain.PlainLoginModule required \
-    username="kafka" password="kafka-password" \ ①
-    user_kafka="kafka-password" \
-    user_Alice="Alice-password"; ②
-```
+[PRE13]
 
 ①
 
@@ -400,17 +320,11 @@ listener.name.external.plain.sasl.jaas.config=\
 
 客户端必须配置用户名和密码进行身份验证：
 
-```java
-sasl.mechanism=PLAIN
-sasl.jaas.config=org.apache.kafka.common.security.plain.PlainLoginModule \
-    required username="Alice" password="Alice-password";
-```
+[PRE14]
 
 内置实现将所有密码存储在每个经纪人的 JAAS 配置中，这是不安全的，也不够灵活，因为所有经纪人都需要重新启动以添加或删除用户。在生产环境中使用 SASL/PLAIN 时，可以使用自定义服务器回调处理程序将经纪人与安全的第三方密码服务器集成。自定义回调处理程序还可以用于支持密码轮换。在服务器端，服务器回调处理程序应支持新旧密码在重叠期间的使用，直到所有客户端切换到新密码。以下示例显示了一个回调处理程序，用于验证使用 Apache 工具`htpasswd`生成的文件中的加密密码：
 
-```java
-publicclassPasswordVerifierextendsPlainServerCallbackHandler{privatefinalList<String>passwdFiles=newArrayList<>();①@Overridepublicvoidconfigure(Map<String,?>configs,Stringmechanism,List<AppConfigurationEntry>jaasEntries){Map<String,?>loginOptions=jaasEntries.get(0).getOptions();Stringfiles=(String)loginOptions.get("password.files");②Collections.addAll(passwdFiles,files.split(","));}@Overrideprotectedbooleanauthenticate(Stringuser,char[]password){returnpasswdFiles.stream()③.anyMatch(file->authenticate(file,user,password));}privatebooleanauthenticate(Stringfile,Stringuser,char[]password){try{Stringcmd=String.format("htpasswd -vb %s %s %s",④file,user,newString(password));returnRuntime.getRuntime().exec(cmd).waitFor()==0;}catch(Exceptione){returnfalse;}}}
-```
+[PRE15]
 
 ①
 
@@ -430,19 +344,11 @@ publicclassPasswordVerifierextendsPlainServerCallbackHandler{privatefinalList<St
 
 经纪人配置了密码验证回调处理程序及其选项：
 
-```java
-listener.name.external.plain.sasl.jaas.config=\
-    org.apache.kafka.common.security.plain.PlainLoginModule required \
-    password.files="/path/to/htpassword.props,/path/to/oldhtpassword.props";
-listener.name.external.plain.sasl.server.callback.handler.class=\
-    com.example.PasswordVerifier
-```
+[PRE16]
 
 在客户端端，可以使用实现`org.apache.kafka.​com⁠mon.security.auth.AuthenticateCallbackHandler`的客户端回调处理程序，在建立连接时动态加载密码，而不是在启动期间从 JAAS 配置中静态加载。密码可以从加密文件或使用外部安全服务器加载，以提高安全性。以下示例使用 Kafka 中的配置类动态从文件加载密码：
 
-```java
-@Overridepublicvoidhandle(Callback[]callbacks)throwsIOException{Propertiesprops=Utils.loadProps(passwdFile);①PasswordConfigconfig=newPasswordConfig(props);Stringuser=config.getString("username");Stringpassword=config.getPassword("password").value();②for(Callbackcallback:callbacks){if(callbackinstanceofNameCallback)((NameCallback)callback).setName(user);elseif(callbackinstanceofPasswordCallback){((PasswordCallback)callback).setPassword(password.toCharArray());}}}privatestaticclassPasswordConfigextendsAbstractConfig{staticConfigDefCONFIG=newConfigDef().define("username",STRING,HIGH,"User name").define("password",PASSWORD,HIGH,"User password");③PasswordConfig(Propertiesprops){super(CONFIG,props,false);}}
-```
+[PRE17]
 
 ①
 
@@ -458,11 +364,7 @@ listener.name.external.plain.sasl.server.callback.handler.class=\
 
 客户端和经纪人都可以配置使用客户端回调来进行 SASL/PLAIN 的经纪人间通信：
 
-```java
-sasl.jaas.config=org.apache.kafka.common.security.plain.PlainLoginModule \
-  required file="/path/to/credentials.props";
-sasl.client.callback.handler.class=com.example.PasswordProvider
-```
+[PRE18]
 
 #### 安全考虑
 
@@ -480,21 +382,11 @@ sasl.client.callback.handler.class=com.example.PasswordProvider
 
 在启动代理之前，可以在启动 ZooKeeper 之前创建一组初始用户。代理在启动期间将 SCRAM 用户元数据加载到内存缓存中，确保所有用户，包括代理用户进行代理间通信，都可以成功进行身份验证。用户可以随时添加或删除。代理使用基于 ZooKeeper watcher 的通知来保持缓存的最新状态。在此示例中，我们为 SASL 机制`SCRAM-SHA-512`创建一个具有主体`User:Alice`和密码`Alice-password`的用户：
 
-```java
-$ bin/kafka-configs.sh --zookeeper localhost:2181 --alter --add-config \
- 'SCRAM-SHA-512=[iterations=8192,password=Alice-password]'            \
- --entity-type users --entity-name Alice
-```
+[PRE19]
 
 可以通过在代理上配置机制来启用一个或多个 SCRAM 机制。只有在监听器用于代理间通信时，才需要为代理配置用户名和密码：
 
-```java
-sasl.enabled.mechanisms=SCRAM-SHA-512
-sasl.mechanism.inter.broker.protocol=SCRAM-SHA-512
-listener.name.external.scram-sha-512.sasl.jaas.config=\
-  org.apache.kafka.common.security.scram.ScramLoginModule required \
-    username="kafka" password="kafka-password"; ①
-```
+[PRE20]
 
 ①
 
@@ -502,18 +394,11 @@ listener.name.external.scram-sha-512.sasl.jaas.config=\
 
 必须配置客户端以使用代理上启用的 SASL 机制之一，并且客户端 JAAS 配置必须包括用户名和密码：
 
-```java
-sasl.mechanism=SCRAM-SHA-512
-sasl.jaas.config=org.apache.kafka.common.security.scram.ScramLoginModule \
-  required username="Alice" password="Alice-password";
-```
+[PRE21]
 
 您可以使用`--add-config`添加新的 SCRAM 用户，并使用`--delete-config`选项删除用户。删除现有用户后，无法为该用户建立新连接，但用户的现有连接将继续工作。可以为代理配置重新认证间隔，以限制用户删除后现有连接可以继续操作的时间。以下示例删除了`Alice`的`SCRAM-SHA-512`配置，以删除该机制的 Alice 凭据：
 
-```java
-$ bin/kafka-configs.sh --zookeeper localhost:2181 --alter --delete-config \
-  'SCRAM-SHA-512' --entity-type users --entity-name Alice
-```
+[PRE22]
 
 #### 安全注意事项
 
@@ -529,13 +414,7 @@ OAuth 是一种授权框架，使应用程序能够获取对 HTTP 服务的有�
 
 Kafka 中的 SASL/OAUTHBEARER 的内置实现不验证令牌，因此只需要在 JAAS 配置中指定登录模块。如果监听器用于经纪人之间的通信，则还必须提供经纪人发起的客户端连接所使用的令牌的详细信息。选项`unsecuredLoginStringClaim_sub`是默认情况下确定连接的`KafkaPrincipal`的主题声明：
 
-```java
-sasl.enabled.mechanisms=OAUTHBEARER
-sasl.mechanism.inter.broker.protocol=OAUTHBEARER
-listener.name.external.oauthbearer.sasl.jaas.config=\
-  org.apache.kafka.common.security.oauthbearer.OAuthBearerLoginModule \
-    required unsecuredLoginStringClaim_sub="kafka"; ①
-```
+[PRE23]
 
 ① (#co_securing_kafka_CO10-1)
 
@@ -543,12 +422,7 @@ listener.name.external.oauthbearer.sasl.jaas.config=\
 
 客户端必须配置主题声明选项`unsecuredLoginStringClaim_sub`。还可以配置其他声明和令牌的生命周期：
 
-```java
-sasl.mechanism=OAUTHBEARER
-sasl.jaas.config=\
-  org.apache.kafka.common.security.oauthbearer.OAuthBearerLoginModule \
-    required unsecuredLoginStringClaim_sub="Alice"; ①
-```
+[PRE24]
 
 ① (#co_securing_kafka_CO11-1)
 
@@ -556,9 +430,7 @@ sasl.jaas.config=\
 
 为了将 Kafka 与第三方 OAuth 服务器集成，以在生产中使用承载令牌，Kafka 客户端必须配置`sasl.login.callback.handler.class`，以使用长期密码或刷新令牌从 OAuth 服务器获取令牌。如果 OAUTHBEARER 用于经纪人之间的通信，则还必须为经纪人配置登录回调处理程序，以获取经纪人为经纪人通信创建的客户端连接的令牌：
 
-```java
-@Overridepublicvoidhandle(Callback[]callbacks)throwsUnsupportedCallbackException{OAuthBearerTokentoken=null;for(Callbackcallback:callbacks){if(callbackinstanceofOAuthBearerTokenCallback){token=acquireToken();①((OAuthBearerTokenCallback)callback).token(token);}elseif(callbackinstanceofSaslExtensionsCallback){②((SaslExtensionsCallback)callback).extensions(processExtensions(token));}elsethrownewUnsupportedCallbackException(callback);}}
-```
+[PRE25]
 
 ① (#co_securing_kafka_CO12-1)
 
@@ -570,9 +442,7 @@ sasl.jaas.config=\
 
 经纪人还必须配置使用`listener.name.<listener-name>.oauthbearer.sasl.server.callback.handler.​class`的服务器回调处理程序来验证客户端提供的令牌：
 
-```java
-@Overridepublicvoidhandle(Callback[]callbacks)throwsUnsupportedCallbackException{for(Callbackcallback:callbacks){if(callbackinstanceofOAuthBearerValidatorCallback){OAuthBearerValidatorCallbackcb=(OAuthBearerValidatorCallback)callback;try{cb.token(validatedToken(cb.tokenValue()));①}catch(OAuthBearerIllegalTokenExceptione){OAuthBearerValidationResultr=e.reason();cb.error(errorStatus(r),r.failureScope(),r.failureOpenIdConfig());}}elseif(callbackinstanceofOAuthBearerExtensionsValidatorCallback){OAuthBearerExtensionsValidatorCallbackecb=(OAuthBearerExtensionsValidatorCallback)callback;ecb.inputExtensions().map().forEach((k,v)->ecb.valid(validateExtension(k,v)));②}else{thrownewUnsupportedCallbackException(callback);}}}
-```
+[PRE26]
 
 ① (#co_securing_kafka_CO13-1)
 
@@ -592,10 +462,7 @@ sasl.jaas.config=\
 
 委托令牌可以使用 Kafka Admin API 或`delegation-tokens`命令创建或更新。要为主体`User:Alice`创建委托令牌，客户端必须使用 Alice 的凭据进行身份验证，除了委托令牌以外的任何身份验证协议。使用委托令牌进行身份验证的客户端无法创建其他委托令牌：
 
-```java
-$bin/kafka-delegation-tokens.sh--bootstrap-serverlocalhost:9092\
- --command-config admin.props --create --max-life-time-period -1  \ --renewer-principal User:Bob ①$bin/kafka-delegation-tokens.sh--bootstrap-serverlocalhost:9092\ ② --command-config admin.props --renew --renew-time-period -1 --hmac c2VjcmV0
-```
+[PRE27]
 
 ①
 
@@ -611,11 +478,7 @@ $bin/kafka-delegation-tokens.sh--bootstrap-serverlocalhost:9092\
 
 至少必须在代理上启用 SASL/SCRAM 机制之一，以支持使用委托令牌进行身份验证。客户端应配置为使用带有令牌标识符的 SCRAM 作为用户名，令牌 HMAC 作为密码。使用此配置进行连接的`Kafka​P⁠rincipal`将是与令牌关联的原始主体，例如`User:Alice`：
 
-```java
-sasl.mechanism=SCRAM-SHA-512
-sasl.jaas.config=org.apache.kafka.common.security.scram.ScramLoginModule \
-  required tokenauth="true" username="MTIz" password="c2VjcmV0"; ①
-```
+[PRE28]
 
 ①
 
@@ -711,9 +574,7 @@ Kafka 部署需要定期维护以轮换密钥、应用安全修复程序并更�
 
 Kafka 具有内置的授权器`AclAuthorizer`，可以通过配置授权器类名来启用，如下所示：
 
-```java
-authorizer.class.name=kafka.security.authorizer.AclAuthorizer
-```
+[PRE29]
 
 # SimpleAclAuthorizer
 
@@ -741,9 +602,7 @@ authorizer.class.name=kafka.security.authorizer.AclAuthorizer
 
 例如，ACL 可以指定：
 
-```java
-User:Alice has Allow permission for Write to Prefixed Topic:customer from 192.168.0.1
-```
+[PRE30]
 
 如果没有与操作匹配的`Deny` ACL，并且至少有一个与操作匹配的`Allow` ACL，则`AclAuthorizer`会授权操作。 如果授予`Read`、`Write`、`Alter`或`Delete`权限，则隐含授予`Describe`权限。 如果授予`AlterConfigs`权限，则隐含授予`DescribeConfigs`权限。
 
@@ -781,12 +640,7 @@ User:Alice has Allow permission for Write to Prefixed Topic:customer from 192.16
 
 Kafka 提供了一个工具，用于使用在代理中配置的授权者来管理 ACL。 ACL 也可以直接在 ZooKeeper 中创建。这对于在启动代理之前创建代理 ACL 非常有用：
 
-```java
-$bin/kafka-acls.sh--add--cluster--operationClusterAction\
- --authorizer-properties zookeeper.connect=localhost:2181    \ ① --allow-principal User:kafka $bin/kafka-acls.sh--bootstrap-serverlocalhost:9092\
- --command-config admin.props --add --topic customerOrders \ ② --producer --allow-principal User:Alice $bin/kafka-acls.sh--bootstrap-serverlocalhost:9092\
- --command-config admin.props --add --resource-pattern-type PREFIXED \ ③ --topic customer --operation Read --allow-principal User:Bob
-```
+[PRE31]
 
 ①
 
@@ -802,10 +656,7 @@ $bin/kafka-acls.sh--add--cluster--operationClusterAction\
 
 `AclAuthorizer`有两个配置选项，用于授予资源或主体广泛访问权限，以简化 ACL 的管理，特别是在首次向现有集群添加授权时：
 
-```java
-super.users=User:Carol;User:Admin
-allow.everyone.if.no.acl.found=true
-```
+[PRE32]
 
 超级用户被授予对所有资源的所有操作的访问权限，没有任何限制，并且不能使用“拒绝”ACL 拒绝访问。如果 Carol 的凭据被泄露，必须将 Carol 从`super.users`中移除，并且必须重新启动代理以应用更改。在生产系统中更安全的做法是使用 ACL 向用户授予特定访问权限，以确保可以轻松地撤销访问权限（如果需要）。
 
@@ -821,9 +672,7 @@ Kafka 中的授权可以定制以实现额外的限制或添加新类型的访�
 
 以下自定义授权器将某些请求的使用限制在内部侦听器上。为简单起见，这里将请求和侦听器名称硬编码，但可以改为使用自定义授权器属性进行配置，以实现灵活性：
 
-```java
-publicclassCustomAuthorizerextendsAclAuthorizer{privatestaticfinalSet<Short>internalOps=Utils.mkSet(CREATE_ACLS.id,DELETE_ACLS.id);privatestaticfinalStringinternalListener="INTERNAL";@OverridepublicList<AuthorizationResult>authorize(AuthorizableRequestContextcontext,List<Action>actions){if(!context.listenerName().equals(internalListener)&&①internalOps.contains((short)context.requestType()))returnCollections.nCopies(actions.size(),DENIED);elsereturnsuper.authorize(context,actions);②}}
-```
+[PRE33]
 
 ①
 
@@ -835,9 +684,7 @@ publicclassCustomAuthorizerextendsAclAuthorizer{privatestaticfinalSet<Short>inte
 
 Kafka 授权器还可以与外部系统集成，以支持基于组的访问控制或基于角色的访问控制。可以使用不同的主体类型为组主体或角色主体创建 ACL。例如，下面的 Scala 类中的角色和组可以定期从 LDAP 服务器中填充，以支持不同级别的`Allow` ACL：
 
-```java
-classRbacAuthorizerextendsAclAuthorizer{@volatileprivatevargroups=Map.empty[KafkaPrincipal,Set[KafkaPrincipal]].withDefaultValue(Set.empty)①@volatileprivatevarroles=Map.empty[KafkaPrincipal,Set[KafkaPrincipal]].withDefaultValue(Set.empty)②overridedefauthorize(context:AuthorizableRequestContext,actions:util.List[Action]):util.List[AuthorizationResult]={valprincipals=groups(context.principal)+context.principalvalallPrincipals=principals.flatMap(roles)++principals③valcontexts=allPrincipals.map(authorizeContext(context,_))actions.asScala.map{action=>valauthorized=contexts.exists(super.authorize(_,List(action).asJava).get(0)==ALLOWED)if(authorized)ALLOWEDelseDENIED④}.asJava}privatedefauthorizeContext(context:AuthorizableRequestContext,contextPrincipal:KafkaPrincipal):AuthorizableRequestContext={newAuthorizableRequestContext{⑤overridedefprincipal()=contextPrincipaloverridedefclientId()=context.clientIdoverridedefrequestType()=context.requestTypeoverridedefrequestVersion()=context.requestVersionoverridedefcorrelationId()=context.correlationIdoverridedefsecurityProtocol()=context.securityProtocoloverridedeflistenerName()=context.listenerNameoverridedefclientAddress()=context.clientAddress}}}
-```
+[PRE34]
 
 ①
 
@@ -861,11 +708,7 @@ classRbacAuthorizerextendsAclAuthorizer{@volatileprivatevargroups=Map.empty[Kafk
 
 可以使用标准 Kafka ACL 工具为组`Sales`或角色`Operator`分配 ACL。
 
-```java
-$bin/kafka-acls.sh--bootstrap-serverlocalhost:9092\
- --command-config admin.props --add --topic customer --producer \ --resource-pattern-type PREFIXED --allow-principal Group:Sales ①$bin/kafka-acls.sh--bootstrap-serverlocalhost:9092\
- --command-config admin.props --add --cluster --operation Alter \ --allow-principal=Role:Operator ②
-```
+[PRE35]
 
 ①
 
@@ -889,16 +732,11 @@ Kafka 经纪人可以配置为生成用于审计和调试的全面*log4j*日志�
 
 授权者为每次被拒绝访问的操作生成`INFO`级别的日志条目，并为每次被授予访问权限的操作生成`DEBUG`级别的日志条目。例如：
 
-```java
-DEBUG Principal = User:Alice is Allowed Operation = Write from host = 127.0.0.1 on resource = Topic:LITERAL:customerOrders for request = Produce with resourceRefCount = 1 (kafka.authorizer.logger)
-INFO Principal = User:Mallory is Denied Operation = Describe from host = 10.0.0.13 on resource = Topic:LITERAL:customerOrders for request = Metadata with resourceRefCount = 1 (kafka.authorizer.logger)
-```
+[PRE36]
 
 以`DEBUG`级别生成的请求日志还包括用户主体和客户端主机的详细信息。如果请求记录器配置为以`TRACE`级别记录日志，则还包括请求的完整详细信息。例如：
 
-```java
-DEBUG Completed request:RequestHeader(apiKey=PRODUCE, apiVersion=8, clientId=producer-1, correlationId=6) -- {acks=-1,timeout=30000,partitionSizes=[customerOrders-0=15514]},response:{responses=[{topic=customerOrders,partition_responses=[{partition=0,error_code=0,base_offset=13,log_append_time=-1,log_start_offset=0,record_errors=[],error_message=null}]}],throttle_time_ms=0} from connection 127.0.0.1:9094-127.0.0.1:61040-0;totalTime:2.42,requestQueueTime:0.112,localTime:2.15,remoteTime:0.0,throttleTime:0,responseQueueTime:0.04,sendTime:0.118,securityProtocol:SASL_SSL,principal:User:Alice,listener:SASL_SSL,clientInformation:ClientInformation(softwareName=apache-kafka-java, softwareVersion=2.7.0-SNAPSHOT) (kafka.request.logger)
-```
+[PRE37]
 
 可以分析授权者和请求日志以检测可疑活动。跟踪身份验证失败的指标以及授权失败日志可能对审计非常有用，并在发生攻击或未经授权的访问事件时提供有价值的信息。为了实现端到端的审计性和消息的可追溯性，当消息被生产时，审计元数据可以包含在消息头中。端到端加密可用于保护此元数据的完整性。
 
@@ -910,22 +748,11 @@ ZooKeeper 存储对于维护 Kafka 集群的可用性至关重要的 Kafka 元�
 
 ZooKeeper 的 SASL 配置使用 Java 系统属性`java.security.auth.login.config`提供。该属性必须设置为包含具有适当登录模块及其选项的 ZooKeeper 服务器的登录部分的 JAAS 配置文件。Kafka 经纪人必须配置具有用于与启用 SASL 的 ZooKeeper 服务器通信的 ZooKeeper 客户端的客户端登录部分。随后的`Server`部分提供了用于启用 Kerberos 身份验证的 ZooKeeper 服务器的 JAAS 配置：
 
-```java
-Server {
-  com.sun.security.auth.module.Krb5LoginModule required
-  useKeyTab=true storeKey=true
-  keyTab="/path/to/zk.keytab"
-  principal="zookeeper/zk1.example.com@EXAMPLE.COM";
-};
-```
+[PRE38]
 
 要在 ZooKeeper 服务器上启用 SASL 身份验证，需要在 ZooKeeper 配置文件中配置身份验证提供程序：
 
-```java
-authProvider.sasl=org.apache.zookeeper.server.auth.SASLAuthenticationProvider
-kerberos.removeHostFromPrincipal=true
-kerberos.removeRealmFromPrincipal=true
-```
+[PRE39]
 
 # 经纪人主体
 
@@ -933,14 +760,7 @@ kerberos.removeRealmFromPrincipal=true
 
 Kafka 经纪人必须配置为使用具有为经纪人提供客户端凭据的 JAAS 配置文件的 SASL 进行对 ZooKeeper 进行身份验证：
 
-```java
-Client {
-  com.sun.security.auth.module.Krb5LoginModule required
-  useKeyTab=true storeKey=true
-  keyTab="/path/to/broker1.keytab"
-  principal="kafka/broker1.example.com@EXAMPLE.COM";
-};
-```
+[PRE40]
 
 ## SSL
 
@@ -948,30 +768,11 @@ SSL 可以在任何使用 SASL 身份验证的 ZooKeeper 端点上启用。与 K
 
 要为 ZooKeeper 服务器配置 SSL，应该配置具有服务器主机名或通配符主机的密钥存储。如果启用了客户端身份验证，则还需要一个用于验证客户端证书的信任存储：
 
-```java
-secureClientPort=2181
-serverCnxnFactory=org.apache.zookeeper.server.NettyServerCnxnFactory
-authProvider.x509=org.apache.zookeeper.server.auth.X509AuthenticationProvider
-ssl.keyStore.location=/path/to/zk.ks.p12
-ssl.keyStore.password=zk-ks-password
-ssl.keyStore.type=PKCS12
-ssl.trustStore.location=/path/to/zk.ts.p12
-ssl.trustStore.password=zk-ts-password
-ssl.trustStore.type=PKCS12
-```
+[PRE41]
 
 要为 Kafka 连接到 ZooKeeper 配置 SSL，经纪人应该配置信任存储以验证 ZooKeeper 证书。如果启用了客户端身份验证，则还需要一个密钥存储：
 
-```java
-zookeeper.ssl.client.enable=true
-zookeeper.clientCnxnSocket=org.apache.zookeeper.ClientCnxnSocketNetty
-zookeeper.ssl.keystore.location=/path/to/zkclient.ks.p12
-zookeeper.ssl.keystore.password=zkclient-ks-password
-zookeeper.ssl.keystore.type=PKCS12
-zookeeper.ssl.truststore.location=/path/to/zkclient.ts.p12
-zookeeper.ssl.truststore.password=zkclient-ts-password
-zookeeper.ssl.truststore.type=PKCS12
-```
+[PRE42]
 
 ## 授权
 
@@ -989,9 +790,7 @@ zookeeper.ssl.truststore.type=PKCS12
 
 接下来的自定义配置提供程序使用工具`gpg`来解密存储在文件中的经纪人或客户端属性：
 
-```java
-publicclassGpgProviderimplementsConfigProvider{@Overridepublicvoidconfigure(Map<String,?>configs){}@OverridepublicConfigDataget(Stringpath){try{Stringpassphrase=System.getenv("PASSPHRASE");①Stringdata=Shell.execCommand(②"gpg","--decrypt","--passphrase",passphrase,path);Propertiesprops=newProperties();props.load(newStringReader(data));③Map<String,String>map=newHashMap<>();for(Stringname:props.stringPropertyNames())map.put(name,props.getProperty(name));returnnewConfigData(map);}catch(IOExceptione){thrownewRuntimeException(e);④}}@OverridepublicConfigDataget(Stringpath,Set<String>keys){⑤ConfigDataconfigData=get(path);Map<String,String>data=configData.data().entrySet().stream().filter(e->keys.contains(e.getKey())).collect(Collectors.toMap(Map.Entry::getKey,Map.Entry::getValue));returnnewConfigData(data,configData.ttl());}@Overridepublicvoidclose(){}}
-```
+[PRE43]
 
 ①
 
@@ -1015,27 +814,15 @@ publicclassGpgProviderimplementsConfigProvider{@Overridepublicvoidconfigure(Map<
 
 您可能还记得在 SASL/PLAIN 部分，我们使用标准的 Kafka 配置类从外部文件加载凭据。现在我们可以使用`gpg`加密该文件：
 
-```java
-gpg --symmetric --output credentials.props.gpg \
- --passphrase "$PASSPHRASE" credentials.props
-```
+[PRE44]
 
 现在我们将间接配置和配置提供程序选项添加到原始属性文件中，以便 Kafka 客户端从加密文件中加载其凭据：
 
-```java
-username=${gpg:/path/to/credentials.props.gpg:username}
-password=${gpg:/path/to/credentials.props.gpg:password}
-config.providers=gpg
-config.providers.gpg.class=com.example.GpgProvider
-```
+[PRE45]
 
 还可以使用 Kafka 配置工具将敏感的经纪人配置选项加密存储在 ZooKeeper 中，而无需使用自定义提供程序。在启动经纪人之前，可以执行以下命令将经纪人在 ZooKeeper 中的 SSL 密钥库密码存储为加密形式。密码编码器秘钥必须在每个经纪人的配置文件中配置以解密该值：
 
-```java
-$ bin/kafka-configs.sh --zookeeper localhost:2181 --alter \
- --entity-type brokers --entity-name 0 --add-config      \
- 'listener.name.external.ssl.keystore.password=server-ks-password,password.encoder.secret=encoder-secret'
-```
+[PRE46]
 
 # 总结
 

@@ -316,9 +316,7 @@ Kafka 消息由用户有效载荷和系统头组成。用户有效载荷包括�
 
 如果您希望自己查看所有这些内容，Kafka 经纪人附带了`DumpLogSegment`工具，允许您查看文件系统中的分区段并检查其内容。您可以使用以下命令运行该工具：
 
-```java
-  bin/kafka-run-class.sh kafka.tools.DumpLogSegments
-```
+[PRE0]
 
 如果选择`--deep-iteration`参数，它将向您显示包装消息内部压缩的消息的信息。
 
