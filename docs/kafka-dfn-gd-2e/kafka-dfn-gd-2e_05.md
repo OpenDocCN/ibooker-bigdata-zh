@@ -57,15 +57,15 @@ Apache Kafka 附带了内置的客户端 API，开发人员在开发与 Kafka �
 以下代码片段显示了如何通过仅设置必填参数并对其他所有内容使用默认值来创建新的生产者：
 
 ```java
-Properties kafkaProps = new Properties(); ①
+Properties kafkaProps = new Properties(); // ①
 kafkaProps.put("bootstrap.servers", "broker1:9092,broker2:9092");
 
 kafkaProps.put("key.serializer",
-    "org.apache.kafka.common.serialization.StringSerializer"); ②
+    "org.apache.kafka.common.serialization.StringSerializer"); // ②
 kafkaProps.put("value.serializer",
     "org.apache.kafka.common.serialization.StringSerializer");
 
-producer = new KafkaProducer<String, String>(kafkaProps); ③
+producer = new KafkaProducer<String, String>(kafkaProps); // ③
 ```
 
 ①
@@ -107,11 +107,11 @@ producer = new KafkaProducer<String, String>(kafkaProps); ③
 ```java
 ProducerRecord<String, String> record =
     new ProducerRecord<>("CustomerCountry", "Precision Products",
-        "France"); ①
+        "France"); // ①
 try {
-    producer.send(record); ②
+    producer.send(record); // ②
 } catch (Exception e) {
-    e.printStackTrace(); ③
+    e.printStackTrace(); // ③
 }
 ```
 
@@ -137,9 +137,9 @@ try {
 ProducerRecord<String, String> record =
     new ProducerRecord<>("CustomerCountry", "Precision Products", "France");
 try {
-    producer.send(record).get(); ①
+    producer.send(record).get(); // ①
 } catch (Exception e) {
-    e.printStackTrace(); ②
+    e.printStackTrace(); // ②
 }
 ```
 
@@ -160,18 +160,18 @@ try {
 要异步发送消息并仍然处理错误情况，生产者支持在发送记录时添加回调。以下是我们如何使用回调的示例：
 
 ```java
-private class DemoProducerCallback implements Callback { ①
+private class DemoProducerCallback implements Callback { // ①
     @Override
     public void onCompletion(RecordMetadata recordMetadata, Exception e) {
         if (e != null) {
-            e.printStackTrace(); ②
+            e.printStackTrace(); // ②
         }
     }
 }
 
 ProducerRecord<String, String> record =
-    new ProducerRecord<>("CustomerCountry", "Biomedical Materials", "USA"); ③
-producer.send(record, new DemoProducerCallback()); ④
+    new ProducerRecord<>("CustomerCountry", "Biomedical Materials", "USA"); // ③
+producer.send(record, new DemoProducerCallback()); // ④
 ```
 
 ①
@@ -437,7 +437,7 @@ Avro 最有趣的特性之一，也是使其适合在 Kafka 等消息系统中�
  "fields": [
      {"name": "id", "type": "int"},
      {"name": "name",  "type": "string"},
-     {"name": "faxNumber", "type": ["null", "string"], "default": "null"} ①
+     {"name": "faxNumber", "type": ["null", "string"], "default": "null"} // ①
  ]
 }
 ```
@@ -495,20 +495,20 @@ props.put("bootstrap.servers", "localhost:9092");
 props.put("key.serializer",
    "io.confluent.kafka.serializers.KafkaAvroSerializer");
 props.put("value.serializer",
-   "io.confluent.kafka.serializers.KafkaAvroSerializer"); ①
-props.put("schema.registry.url", schemaUrl); ②
+   "io.confluent.kafka.serializers.KafkaAvroSerializer"); // ①
+props.put("schema.registry.url", schemaUrl); // ②
 
 String topic = "customerContacts";
 
-Producer<String, Customer> producer = new KafkaProducer<>(props); ③
+Producer<String, Customer> producer = new KafkaProducer<>(props); // ③
 
 // We keep producing new events until someone ctrl-c
 while (true) {
-    Customer customer = CustomerGenerator.getNext(); ④
+    Customer customer = CustomerGenerator.getNext(); // ④
     System.out.println("Generated customer " +
         customer.toString());
     ProducerRecord<String, Customer> record =
-        new ProducerRecord<>(topic, customer.getName(), customer); ⑤
+        new ProducerRecord<>(topic, customer.getName(), customer); // ⑤
     producer.send(record); // ⑥
 }
 ```
@@ -533,7 +533,7 @@ while (true) {
 
 我们还使用 `Customer` 作为值类型来实例化 `ProducerRecord`，并在创建新记录时传递一个 `Customer` 对象。
 
-// ⑥
+⑥
 
 就是这样。我们发送包含我们的 `Customer` 对象的记录，`KafkaAvro​Serial⁠izer` 将处理其余部分。
 
@@ -543,14 +543,14 @@ Avro 还允许您使用通用 Avro 对象，这些对象用作键值映射，而
 Properties props = new Properties();
 props.put("bootstrap.servers", "localhost:9092");
 props.put("key.serializer",
-   "io.confluent.kafka.serializers.KafkaAvroSerializer"); ①
+   "io.confluent.kafka.serializers.KafkaAvroSerializer"); // ①
 props.put("value.serializer",
    "io.confluent.kafka.serializers.KafkaAvroSerializer");
-props.put("schema.registry.url", url); ②
+props.put("schema.registry.url", url); // ②
 
 String schemaString =
     "{\"namespace\": \"customerManagement.avro\",
-     "\"type\": \"record\", " + ③
+     "\"type\": \"record\", " + // ③
      "\"name\": \"Customer\"," +
      "\"fields\": [" +
       "{\"name\": \"id\", \"type\": \"int\"}," +
@@ -559,7 +559,7 @@ String schemaString =
        "\"default\":\"null\" }" +
     "]}";
 Producer<String, GenericRecord> producer =
-   new KafkaProducer<String, GenericRecord>(props); ④
+   new KafkaProducer<String, GenericRecord>(props); // ④
 
 Schema.Parser parser = new Schema.Parser();
 Schema schema = parser.parse(schemaString);
@@ -568,7 +568,7 @@ for (int nCustomers = 0; nCustomers < customers; nCustomers++) {
     String name = "exampleCustomer" + nCustomers;
     String email = "example " + nCustomers + "@example.com";
 
-    GenericRecord customer = new GenericData.Record(schema); ⑤
+    GenericRecord customer = new GenericData.Record(schema); // ⑤
     customer.put("id", nCustomers);
     customer.put("name", name);
     customer.put("email", email);
@@ -612,7 +612,7 @@ ProducerRecord<String, String> record =
 
 ```java
 ProducerRecord<String, String> record =
-    new ProducerRecord<>("CustomerCountry", "USA"); ①
+    new ProducerRecord<>("CustomerCountry", "USA"); // ①
 ```
 
 ①
@@ -642,7 +642,7 @@ import org.apache.kafka.common.utils.Utils;
 
 public class BananaPartitioner implements Partitioner {
 
-    public void configure(Map<String, ?> configs) {} ①
+    public void configure(Map<String, ?> configs) {} // ①
 
     public int partition(String topic, Object key, byte[] keyBytes,
                          Object value, byte[] valueBytes,
@@ -650,7 +650,7 @@ public class BananaPartitioner implements Partitioner {
         List<PartitionInfo> partitions = cluster.partitionsForTopic(topic);
         int numPartitions = partitions.size();
 
-        if ((keyBytes == null) || (!(key instanceOf String))) ②
+        if ((keyBytes == null) || (!(key instanceOf String))) // ②
             throw new InvalidRecordException("We expect all messages " +
                 "to have customer name as key");
 
@@ -716,22 +716,22 @@ public class CountingProducerInterceptor implements ProducerInterceptor {
 
   public void configure(Map<String, ?> map) {
       Long windowSize = Long.valueOf(
-              (String) map.get("counting.interceptor.window.size.ms")); ①
+              (String) map.get("counting.interceptor.window.size.ms")); // ①
       executorService.scheduleAtFixedRate(CountingProducerInterceptor::run,
               windowSize, windowSize, TimeUnit.MILLISECONDS);
   }
 
   public ProducerRecord onSend(ProducerRecord producerRecord) {
       numSent.incrementAndGet();
-      return producerRecord; ②
+      return producerRecord; // ②
   }
 
   public void onAcknowledgement(RecordMetadata recordMetadata, Exception e) {
-      numAcked.incrementAndGet(); ③
+      numAcked.incrementAndGet(); // ③
   }
 
   public void close() {
-      executorService.shutdownNow(); ④
+      executorService.shutdownNow(); // ④
   }
 
   public static void run() {
@@ -787,11 +787,11 @@ Kafka 代理有能力限制消息的生产和消费速率。这是通过配额�
 让我们看几个例子：
 
 ```java
-bin/kafka-configs  --bootstrap-server localhost:9092 --alter --add-config 'producer_byte_rate=1024' --entity-name clientC --entity-type clients ①
+bin/kafka-configs  --bootstrap-server localhost:9092 --alter --add-config 'producer_byte_rate=1024' --entity-name clientC --entity-type clients // ①
 
-bin/kafka-configs  --bootstrap-server localhost:9092 --alter --add-config 'producer_byte_rate=1024,consumer_byte_rate=2048' --entity-name user1 --entity-type users ②
+bin/kafka-configs  --bootstrap-server localhost:9092 --alter --add-config 'producer_byte_rate=1024,consumer_byte_rate=2048' --entity-name user1 --entity-type users // ②
 
-bin/kafka-configs  --bootstrap-server localhost:9092 --alter --add-config 'consumer_byte_rate=2048' --entity-type users ③
+bin/kafka-configs  --bootstrap-server localhost:9092 --alter --add-config 'consumer_byte_rate=2048' --entity-type users // ③
 ```
 
 ①

@@ -151,7 +151,7 @@ SSL 通道是加密的，因此在 CPU 使用方面引入了明显的开销。�
 ```java
 $keytool-genkeypair-keyalgRSA-keysize2048-keystoreserver.ca.p12\
  -storetype PKCS12 -storepass server-ca-password -keypass server-ca-password  \ -alias ca -dname "CN=BrokerCA" -ext bc=ca:true -validity 365 ①$keytool-export-fileserver.ca.crt-keystoreserver.ca.p12\
- -storetype PKCS12 -storepass server-ca-password -alias ca -rfc ②
+ -storetype PKCS12 -storepass server-ca-password -alias ca -rfc // ②
 ```
 
 ①  
@@ -169,7 +169,7 @@ $keytool-genkey-keyalgRSA-keysize2048-keystoreserver.ks.p12\
  -storepass server-ks-password -keypass server-ks-password -alias server   \ -storetype PKCS12 -dname "CN=Kafka,O=Confluent,C=GB" -validity 365 ①$keytool-certreq-fileserver.csr-keystoreserver.ks.p12-storetypePKCS12\
  -storepass server-ks-password -keypass server-ks-password -alias server ②$keytool-gencert-infileserver.csr-outfileserver.crt\
  -keystore server.ca.p12 -storetype PKCS12 -storepass server-ca-password   \ -alias ca -ext SAN=DNS:broker1.example.com -validity 365 ③$catserver.crtserver.ca.crt>serverchain.crt$keytool-importcert-fileserverchain.crt-keystoreserver.ks.p12\
- -storepass server-ks-password -keypass server-ks-password -alias server   \ -storetype PKCS12 -noprompt ④
+ -storepass server-ks-password -keypass server-ks-password -alias server   \ -storetype PKCS12 -noprompt // ④
 ```
 
 ①  
@@ -212,7 +212,7 @@ $ keytool -import -file server.ca.crt -keystore client.ts.p12 \
  -storepass client-ks-password -keypass client-ks-password -alias client keytool -gencert -infile client.csr -outfile client.crt                     \
  -keystore client.ca.p12 -storetype PKCS12 -storepass client-ca-password   \ -alias ca -validity 365 cat client.crt client.ca.crt > clientchain.crt keytool -importcert -file clientchain.crt -keystore client.ks.p12           \
  -storepass client-ks-password -keypass client-ks-password -alias client   \ -storetype PKCS12 -noprompt ③#AddclientCAcertificatetobroker'struststorekeytool -import -file client.ca.crt -keystore server.ts.p12 -alias client \
- -storetype PKCS12 -storepass server-ts-password -noprompt ④
+ -storetype PKCS12 -storepass server-ts-password -noprompt // ④
 ```
 
 ①
@@ -319,11 +319,11 @@ Kafka 使用 Java 运行时环境中包含的 GSSAPI 安全提供程序来支持
 
 ```java
 sasl.enabled.mechanisms=GSSAPI
-listener.name.external.gssapi.sasl.jaas.config=\ ①
+listener.name.external.gssapi.sasl.jaas.config=\ // ①
   com.sun.security.auth.module.Krb5LoginModule required \
     useKeyTab=true storeKey=true     \
-    keyTab="/path/to/broker1.keytab" \ ②
-    principal="kafka/broker1.example.com@EXAMPLE.COM"; ③
+    keyTab="/path/to/broker1.keytab" \ // ②
+    principal="kafka/broker1.example.com@EXAMPLE.COM"; // ③
 ```
 
 ①
@@ -349,11 +349,11 @@ sasl.kerberos.service.name=kafka
 
 ```java
 sasl.mechanism=GSSAPI
-sasl.kerberos.service.name=kafka ①
+sasl.kerberos.service.name=kafka // ①
 sasl.jaas.config=com.sun.security.auth.module.Krb5LoginModule required \
     useKeyTab=true storeKey=true   \
     keyTab="/path/to/alice.keytab" \
-    principal="Alice@EXAMPLE.COM"; ②
+    principal="Alice@EXAMPLE.COM"; // ②
 ```
 
 ①
@@ -385,9 +385,9 @@ sasl.enabled.mechanisms=PLAIN
 sasl.mechanism.inter.broker.protocol=PLAIN
 listener.name.external.plain.sasl.jaas.config=\
   org.apache.kafka.common.security.plain.PlainLoginModule required \
-    username="kafka" password="kafka-password" \ ①
+    username="kafka" password="kafka-password" \ // ①
     user_kafka="kafka-password" \
-    user_Alice="Alice-password"; ②
+    user_Alice="Alice-password"; // ②
 ```
 
 ①
@@ -493,7 +493,7 @@ sasl.enabled.mechanisms=SCRAM-SHA-512
 sasl.mechanism.inter.broker.protocol=SCRAM-SHA-512
 listener.name.external.scram-sha-512.sasl.jaas.config=\
   org.apache.kafka.common.security.scram.ScramLoginModule required \
-    username="kafka" password="kafka-password"; ①
+    username="kafka" password="kafka-password"; // ①
 ```
 
 ①
@@ -534,7 +534,7 @@ sasl.enabled.mechanisms=OAUTHBEARER
 sasl.mechanism.inter.broker.protocol=OAUTHBEARER
 listener.name.external.oauthbearer.sasl.jaas.config=\
   org.apache.kafka.common.security.oauthbearer.OAuthBearerLoginModule \
-    required unsecuredLoginStringClaim_sub="kafka"; ①
+    required unsecuredLoginStringClaim_sub="kafka"; // ①
 ```
 
 ① (#co_securing_kafka_CO10-1)
@@ -547,7 +547,7 @@ listener.name.external.oauthbearer.sasl.jaas.config=\
 sasl.mechanism=OAUTHBEARER
 sasl.jaas.config=\
   org.apache.kafka.common.security.oauthbearer.OAuthBearerLoginModule \
-    required unsecuredLoginStringClaim_sub="Alice"; ①
+    required unsecuredLoginStringClaim_sub="Alice"; // ①
 ```
 
 ① (#co_securing_kafka_CO11-1)
@@ -614,7 +614,7 @@ $bin/kafka-delegation-tokens.sh--bootstrap-serverlocalhost:9092\
 ```java
 sasl.mechanism=SCRAM-SHA-512
 sasl.jaas.config=org.apache.kafka.common.security.scram.ScramLoginModule \
-  required tokenauth="true" username="MTIz" password="c2VjcmV0"; ①
+  required tokenauth="true" username="MTIz" password="c2VjcmV0"; // ①
 ```
 
 ①
@@ -864,7 +864,7 @@ classRbacAuthorizerextendsAclAuthorizer{@volatileprivatevargroups=Map.empty[Kafk
 ```java
 $bin/kafka-acls.sh--bootstrap-serverlocalhost:9092\
  --command-config admin.props --add --topic customer --producer \ --resource-pattern-type PREFIXED --allow-principal Group:Sales ①$bin/kafka-acls.sh--bootstrap-serverlocalhost:9092\
- --command-config admin.props --add --cluster --operation Alter \ --allow-principal=Role:Operator ②
+ --command-config admin.props --add --cluster --operation Alter \ --allow-principal=Role:Operator // ②
 ```
 
 ①

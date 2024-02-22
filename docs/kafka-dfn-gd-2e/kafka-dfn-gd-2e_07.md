@@ -92,17 +92,17 @@ topics.names().get().forEach(System.out::println);
 现在让我们尝试一些更有雄心的事情：检查主题是否存在，如果不存在则创建。检查特定主题是否存在的一种方法是获取所有主题的列表，并检查您需要的主题是否在列表中。在大型集群上，这可能效率低下。此外，有时您希望检查的不仅仅是主题是否存在 - 您希望确保主题具有正确数量的分区和副本。例如，Kafka Connect 和 Confluent Schema Registry 使用 Kafka 主题存储配置。当它们启动时，它们会检查配置主题是否存在，它只有一个分区以确保配置更改按严格顺序到达，它有三个副本以确保可用性，并且主题是压缩的，因此旧配置将被无限期保留：
 
 ```java
-DescribeTopicsResult demoTopic = admin.describeTopics(TOPIC_LIST); ①
+DescribeTopicsResult demoTopic = admin.describeTopics(TOPIC_LIST); // ①
 
 try {
-    topicDescription = demoTopic.values().get(TOPIC_NAME).get(); ②
+    topicDescription = demoTopic.values().get(TOPIC_NAME).get(); // ②
     System.out.println("Description of demo topic:" + topicDescription);
 
-    if (topicDescription.partitions().size() != NUM_PARTITIONS) { ③
+    if (topicDescription.partitions().size() != NUM_PARTITIONS) { // ③
       System.out.println("Topic has wrong number of partitions. Exiting.");
       System.exit(-1);
     }
-} catch (ExecutionException e) { ④
+} catch (ExecutionException e) { // ④
     // exit early for almost all exceptions
     if (! (e.getCause() instanceof UnknownTopicOrPartitionException)) {
         e.printStackTrace();
@@ -115,7 +115,7 @@ try {
     // Note that number of partitions and replicas is optional. If they are
     // not specified, the defaults configured on the Kafka brokers will be used
     CreateTopicsResult newTopic = admin.createTopics(Collections.singletonList(
-            new NewTopic(TOPIC_NAME, NUM_PARTITIONS, REP_FACTOR))); ⑤
+            new NewTopic(TOPIC_NAME, NUM_PARTITIONS, REP_FACTOR))); // ⑤
 
     // Check that the topic was created correctly:
     if (newTopic.numPartitions(TOPIC_NAME).get() != NUM_PARTITIONS) { // ⑥
@@ -145,7 +145,7 @@ try {
 
 如果主题不存在，我们将创建一个新主题。在创建主题时，您可以仅指定名称并对所有细节使用默认值。您还可以指定分区数、副本数和配置。
 
-// ⑥
+⑥
 
 最后，您希望等待主题创建完成，并可能验证结果。在此示例中，我们正在检查分区数。由于我们在创建主题时指定了分区数，我们相当确定它是正确的。如果您在创建主题时依赖经纪人默认值，则更常见地检查结果。请注意，由于我们再次调用`get()`来检查`CreateTopic`的结果，此方法可能会抛出异常。在这种情况下，`TopicExists​Exception`很常见，您需要处理它（也许通过描述主题来检查正确的配置）。
 
@@ -173,23 +173,23 @@ try {
 到目前为止，所有示例都使用了不同`AdminClient`方法返回的`Future`上的阻塞`get()`调用。大多数情况下，这就是您所需要的——管理操作很少，等待操作成功或超时通常是可以接受的。有一个例外：如果您要写入一个预期处理大量管理请求的服务器。在这种情况下，您不希望在等待 Kafka 响应时阻塞服务器线程。您希望继续接受用户的请求并将其发送到 Kafka，当 Kafka 响应时，将响应发送给客户端。在这些情况下，`KafkaFuture`的多功能性就变得非常有用。这是一个简单的例子。
 
 ```java
-vertx.createHttpServer().requestHandler(request -> { ①
-    String topic = request.getParam("topic"); ②
+vertx.createHttpServer().requestHandler(request -> { // ①
+    String topic = request.getParam("topic"); // ②
     String timeout = request.getParam("timeout");
     int timeoutMs = NumberUtils.toInt(timeout, 1000);
 
-    DescribeTopicsResult demoTopic = admin.describeTopics( ③
+    DescribeTopicsResult demoTopic = admin.describeTopics( // ③
             Collections.singletonList(topic),
             new DescribeTopicsOptions().timeoutMs(timeoutMs));
 
-    demoTopic.values().get(topic).whenComplete( ④
+    demoTopic.values().get(topic).whenComplete( // ④
             new KafkaFuture.BiConsumer<TopicDescription, Throwable>() {
                 @Override
                 public void accept(final TopicDescription topicDescription,
                                    final Throwable throwable) {
                     if (throwable != null) {
                       request.response().end("Error trying to describe topic "
-                              + topic + " due to " + throwable.getMessage()); ⑤
+                              + topic + " due to " + throwable.getMessage()); // ⑤
                     } else {
                         request.response().end(topicDescription.toString()); // ⑥
                     }
@@ -218,7 +218,7 @@ vertx.createHttpServer().requestHandler(request -> { ①
 
 如果`Future`完成时出现异常，我们会将错误发送给 HTTP 客户端。
 
-// ⑥
+⑥
 
 如果`Future`成功完成，我们将使用主题描述回复客户端。
 
@@ -234,14 +234,14 @@ vertx.createHttpServer().requestHandler(request -> { ①
 
 ```java
 ConfigResource configResource =
-        new ConfigResource(ConfigResource.Type.TOPIC, TOPIC_NAME); ①
+        new ConfigResource(ConfigResource.Type.TOPIC, TOPIC_NAME); // ①
 DescribeConfigsResult configsResult =
         admin.describeConfigs(Collections.singleton(configResource));
 Config configs = configsResult.all().get().get(configResource);
 
 // print nondefault configs
 configs.entries().stream().filter(
-        entry -> !entry.isDefault()).forEach(System.out::println); ②
+        entry -> !entry.isDefault()).forEach(System.out::println); // ②
 
 // Check if topic is compacted
 ConfigEntry compaction = new ConfigEntry(TopicConfig.CLEANUP_POLICY_CONFIG,
@@ -249,7 +249,7 @@ ConfigEntry compaction = new ConfigEntry(TopicConfig.CLEANUP_POLICY_CONFIG,
 if (!configs.entries().contains(compaction)) {
     // if topic is not compacted, compact it
     Collection<AlterConfigOp> configOp = new ArrayList<AlterConfigOp>();
-    configOp.add(new AlterConfigOp(compaction, AlterConfigOp.OpType.SET)); ③
+    configOp.add(new AlterConfigOp(compaction, AlterConfigOp.OpType.SET)); // ③
     Map<ConfigResource, Collection<AlterConfigOp>> alterConf = new HashMap<>();
     alterConf.put(configResource, configOp);
     admin.incrementalAlterConfigs(alterConf).all().get();
@@ -307,18 +307,18 @@ ConsumerGroupDescription groupDescription = admin
 ```java
 Map<TopicPartition, OffsetAndMetadata> offsets =
         admin.listConsumerGroupOffsets(CONSUMER_GROUP)
-                .partitionsToOffsetAndMetadata().get(); ①
+                .partitionsToOffsetAndMetadata().get(); // ①
 
 Map<TopicPartition, OffsetSpec> requestLatestOffsets = new HashMap<>();
 
 for(TopicPartition tp: offsets.keySet()) {
-    requestLatestOffsets.put(tp, OffsetSpec.latest()); ②
+    requestLatestOffsets.put(tp, OffsetSpec.latest()); // ②
 }
 
 Map<TopicPartition, ListOffsetsResult.ListOffsetsResultInfo> latestOffsets =
         admin.listOffsets(requestLatestOffsets).all().get();
 
-for (Map.Entry<TopicPartition, OffsetAndMetadata> e: offsets.entrySet()) { ③
+for (Map.Entry<TopicPartition, OffsetAndMetadata> e: offsets.entrySet()) { // ③
     String topic = e.getKey().topic();
     int partition =  e.getKey().partition();
     long committedOffset = e.getValue().offset();
@@ -359,21 +359,21 @@ for (Map.Entry<TopicPartition, OffsetAndMetadata> e: offsets.entrySet()) { ③
 
 ```java
 Map<TopicPartition, ListOffsetsResult.ListOffsetsResultInfo> earliestOffsets =
-    admin.listOffsets(requestEarliestOffsets).all().get(); ①
+    admin.listOffsets(requestEarliestOffsets).all().get(); // ①
 
 Map<TopicPartition, OffsetAndMetadata> resetOffsets = new HashMap<>();
 for (Map.Entry<TopicPartition, ListOffsetsResult.ListOffsetsResultInfo> e:
         earliestOffsets.entrySet()) {
-  resetOffsets.put(e.getKey(), new OffsetAndMetadata(e.getValue().offset())); ②
+  resetOffsets.put(e.getKey(), new OffsetAndMetadata(e.getValue().offset())); // ②
 }
 
 try {
-  admin.alterConsumerGroupOffsets(CONSUMER_GROUP, resetOffsets).all().get(); ③
+  admin.alterConsumerGroupOffsets(CONSUMER_GROUP, resetOffsets).all().get(); // ③
 } catch (ExecutionException e) {
   System.out.println("Failed to update the offsets committed by group "
             + CONSUMER_GROUP + " with error " + e.getMessage());
   if (e.getCause() instanceof UnknownMemberIdException)
-      System.out.println("Check if consumer group is still active."); ④
+      System.out.println("Check if consumer group is still active."); // ④
 }
 ```
 
@@ -402,7 +402,7 @@ try {
 ```java
 DescribeClusterResult cluster = admin.describeCluster();
 
-System.out.println("Connected to cluster " + cluster.clusterId().get()); ①
+System.out.println("Connected to cluster " + cluster.clusterId().get()); // ①
 System.out.println("The brokers in the cluster are:");
 cluster.nodes().get().forEach(node -> System.out.println("    * " + node));
 System.out.println("The controller is: " + cluster.controller().get());
@@ -426,7 +426,7 @@ System.out.println("The controller is: " + cluster.controller().get());
 
 ```java
 Map<String, NewPartitions> newPartitions = new HashMap<>();
-newPartitions.put(TOPIC_NAME, NewPartitions.increaseTo(NUM_PARTITIONS+2)); ①
+newPartitions.put(TOPIC_NAME, NewPartitions.increaseTo(NUM_PARTITIONS+2)); // ①
 admin.createPartitions(newPartitions).all().get();
 ```
 
@@ -473,10 +473,10 @@ for (Map.Entry<TopicPartition, ListOffsetsResult.ListOffsetsResultInfo>  e:
 Set<TopicPartition> electableTopics = new HashSet<>();
 electableTopics.add(new TopicPartition(TOPIC_NAME, 0));
 try {
-    admin.electLeaders(ElectionType.PREFERRED, electableTopics).all().get(); ①
+    admin.electLeaders(ElectionType.PREFERRED, electableTopics).all().get(); // ①
 } catch (ExecutionException e) {
     if (e.getCause() instanceof ElectionNotNeededException) {
-        System.out.println("All leaders are preferred already"); ②
+        System.out.println("All leaders are preferred already"); // ②
     }
 }
 ```
@@ -498,17 +498,17 @@ try {
 ```java
 Map<TopicPartition, Optional<NewPartitionReassignment>> reassignment = new HashMap<>();
 reassignment.put(new TopicPartition(TOPIC_NAME, 0),
-        Optional.of(new NewPartitionReassignment(Arrays.asList(0,1)))); ①
+        Optional.of(new NewPartitionReassignment(Arrays.asList(0,1)))); // ①
 reassignment.put(new TopicPartition(TOPIC_NAME, 1),
-        Optional.of(new NewPartitionReassignment(Arrays.asList(1)))); ②
+        Optional.of(new NewPartitionReassignment(Arrays.asList(1)))); // ②
 reassignment.put(new TopicPartition(TOPIC_NAME, 2),
-        Optional.of(new NewPartitionReassignment(Arrays.asList(1,0)))); ③
-reassignment.put(new TopicPartition(TOPIC_NAME, 3), Optional.empty()); ④
+        Optional.of(new NewPartitionReassignment(Arrays.asList(1,0)))); // ③
+reassignment.put(new TopicPartition(TOPIC_NAME, 3), Optional.empty()); // ④
 
 admin.alterPartitionReassignments(reassignment).all().get();
 
 System.out.println("currently reassigning: " +
-        admin.listPartitionReassignments().reassignments().get()); ⑤
+        admin.listPartitionReassignments().reassignments().get()); // ⑤
 demoTopic = admin.describeTopics(TOPIC_LIST);
 topicDescription = demoTopic.values().get(TOPIC_NAME).get();
 System.out.println("Description of demo topic:" + topicDescription); // ⑥
@@ -534,7 +534,7 @@ System.out.println("Description of demo topic:" + topicDescription); // ⑥
 
 我们可以列出正在进行的重新分配。
 
-// ⑥
+⑥
 
 我们也可以打印新状态，但请记住，直到显示一致的结果可能需要一段时间。
 
@@ -590,13 +590,13 @@ public void maybeCreateTopic(String topicName)
 public void setUp() {
     Node broker = new Node(0,"localhost",9092);
     this.admin = spy(new MockAdminClient(Collections.singletonList(broker),
-        broker)); ①
+        broker)); // ①
 
     // without this, the tests will throw
     // `java.lang.UnsupportedOperationException: Not implemented yet`
     AlterConfigsResult emptyResult = mock(AlterConfigsResult.class);
     doReturn(KafkaFuture.completedFuture(null)).when(emptyResult).all();
-    doReturn(emptyResult).when(admin).incrementalAlterConfigs(any()); ②
+    doReturn(emptyResult).when(admin).incrementalAlterConfigs(any()); // ②
 }
 ```
 
@@ -616,14 +616,14 @@ public void testCreateTestTopic()
         throws ExecutionException, InterruptedException {
     TopicCreator tc = new TopicCreator(admin);
     tc.maybeCreateTopic("test.is.a.test.topic");
-    verify(admin, times(1)).createTopics(any()); ①
+    verify(admin, times(1)).createTopics(any()); // ①
 }
 
 @Test
 public void testNotTopic() throws ExecutionException, InterruptedException {
     TopicCreator tc = new TopicCreator(admin);
     tc.maybeCreateTopic("not.a.test");
-    verify(admin, never()).createTopics(any()); ②
+    verify(admin, never()).createTopics(any()); // ②
 }
 ```
 

@@ -124,7 +124,7 @@ KafkaConsumer<String, String> consumer =
 创建消费者后，下一步是订阅一个或多个主题。`subscribe()`方法接受一个主题列表作为参数，所以使用起来非常简单：
 
 ```java
-consumer.subscribe(Collections.singletonList("customerCountries")); ①
+consumer.subscribe(Collections.singletonList("customerCountries")); // ①
 ```
 
 ①
@@ -150,10 +150,10 @@ consumer.subscribe(Pattern.compile("test.*"));
 ```java
 Duration timeout = Duration.ofMillis(100);
 
-while (true) { ①
-    ConsumerRecords<String, String> records = consumer.poll(timeout); ②
+while (true) { // ①
+    ConsumerRecords<String, String> records = consumer.poll(timeout); // ②
 
-    for (ConsumerRecord<String, String> record : records) { ③
+    for (ConsumerRecord<String, String> record : records) { // ③
         System.out.printf("topic = %s, partition = %d, offset = %d, " +
                         "customer = %s, country = %s\n",
         record.topic(), record.partition(), record.offset(),
@@ -165,7 +165,7 @@ while (true) { ①
         custCountryMap.put(record.value(), updatedCount);
 
         JSONObject json = new JSONObject(custCountryMap);
-        System.out.println(json.toString()); ④
+        System.out.println(json.toString()); // ④
     }
 }
 ```
@@ -349,12 +349,12 @@ while (true) {
         System.out.printf("topic = %s, partition = %d, offset =
             %d, customer = %s, country = %s\n",
             record.topic(), record.partition(),
-            record.offset(), record.key(), record.value()); ①
+            record.offset(), record.key(), record.value()); // ①
     }
     try {
-        consumer.commitSync(); ②
+        consumer.commitSync(); // ②
     } catch (CommitFailedException e) {
-        log.error("commit failed", e) ③
+        log.error("commit failed", e) // ③
     }
 }
 ```
@@ -388,7 +388,7 @@ while (true) {
             record.topic(), record.partition(), record.offset(),
             record.key(), record.value());
     }
-    consumer.commitAsync(); ①
+    consumer.commitAsync(); // ①
 }
 ```
 
@@ -417,7 +417,7 @@ while (true) {
             if (e != null)
                 log.error("Commit failed for offsets {}", offsets, e);
         }
-    }); ①
+    }); // ①
 }
 ```
 
@@ -447,9 +447,9 @@ try {
                 record.topic(), record.partition(),
                 record.offset(), record.key(), record.value());
         }
-        consumer.commitAsync(); ①
+        consumer.commitAsync(); // ①
     }
-    consumer.commitSync(); ②
+    consumer.commitSync(); // ②
 } catch (Exception e) {
     log.error("Unexpected error", e);
 } finally {
@@ -475,7 +475,7 @@ try {
 
 ```java
 private Map<TopicPartition, OffsetAndMetadata> currentOffsets =
-    new HashMap<>(); ①
+    new HashMap<>(); // ①
 int count = 0;
 
 ....
@@ -487,12 +487,12 @@ while (true) {
         System.out.printf("topic = %s, partition = %s, offset = %d,
             customer = %s, country = %s\n",
             record.topic(), record.partition(), record.offset(),
-            record.key(), record.value()); ②
+            record.key(), record.value()); // ②
         currentOffsets.put(
             new TopicPartition(record.topic(), record.partition()),
-            new OffsetAndMetadata(record.offset()+1, "no metadata")); ③
-        if (count % 1000 == 0)   ④
-            consumer.commitAsync(currentOffsets, null); ⑤
+            new OffsetAndMetadata(record.offset()+1, "no metadata")); // ③
+        if (count % 1000 == 0)   // ④
+            consumer.commitAsync(currentOffsets, null); // ⑤
         count++;
     }
 }
@@ -557,20 +557,20 @@ private Map<TopicPartition, OffsetAndMetadata> currentOffsets =
     new HashMap<>();
 Duration timeout = Duration.ofMillis(100);
 
-private class HandleRebalance implements ConsumerRebalanceListener { ①
+private class HandleRebalance implements ConsumerRebalanceListener { // ①
     public void onPartitionsAssigned(Collection<TopicPartition>
-        partitions) { ②
+        partitions) { // ②
     }
 
     public void onPartitionsRevoked(Collection<TopicPartition> partitions) {
         System.out.println("Lost partitions in rebalance. " +
             "Committing current offsets:" + currentOffsets);
-        consumer.commitSync(currentOffsets); ③
+        consumer.commitSync(currentOffsets); // ③
     }
 }
 
 try {
-    consumer.subscribe(topics, new HandleRebalance()); ④
+    consumer.subscribe(topics, new HandleRebalance()); // ④
 
     while (true) {
         ConsumerRecords<String, String> records = consumer.poll(timeout);
@@ -630,12 +630,12 @@ Long oneHourEarlier = Instant.now().atZone(ZoneId.systemDefault())
           .minusHours(1).toEpochSecond();
 Map<TopicPartition, Long> partitionTimestampMap = consumer.assignment()
         .stream()
-        .collect(Collectors.toMap(tp -> tp, tp -> oneHourEarlier)); ①
+        .collect(Collectors.toMap(tp -> tp, tp -> oneHourEarlier)); // ①
 Map<TopicPartition, OffsetAndTimestamp> offsetMap
-        = consumer.offsetsForTimes(partitionTimestampMap); ②
+        = consumer.offsetsForTimes(partitionTimestampMap); // ②
 
 for(Map.Entry<TopicPartition,OffsetAndTimestamp> entry: offsetMap.entrySet()) {
-    consumer.seek(entry.getKey(), entry.getValue().offset()); ③
+    consumer.seek(entry.getKey(), entry.getValue().offset()); // ③
 }
 ```
 
@@ -663,7 +663,7 @@ for(Map.Entry<TopicPartition,OffsetAndTimestamp> entry: offsetMap.entrySet()) {
 Runtime.getRuntime().addShutdownHook(new Thread() {
     public void run() {
         System.out.println("Starting exit...");
-        consumer.wakeup(); ①
+        consumer.wakeup(); // ①
         try {
             mainThread.join();
         } catch (InterruptedException e) {
@@ -673,7 +673,7 @@ Runtime.getRuntime().addShutdownHook(new Thread() {
 });
 
 ...
-Duration timeout = Duration.ofMillis(10000); ②
+Duration timeout = Duration.ofMillis(10000); // ②
 
 try {
     // looping until ctrl-c, the shutdown hook will cleanup on exit
@@ -692,9 +692,9 @@ try {
         movingAvg.consumer.commitSync();
     }
 } catch (WakeupException e) {
-    // ignore for shutdown ③
+    // ignore for shutdown // ③
 } finally {
-    consumer.close(); ④
+    consumer.close(); // ④
     System.out.println("Closed consumer and we are done");
 }
 ```
@@ -757,7 +757,7 @@ import org.apache.kafka.common.errors.SerializationException;
 import java.nio.ByteBuffer;
 import java.util.Map;
 
-public class CustomerDeserializer implements Deserializer<Customer> { ①
+public class CustomerDeserializer implements Deserializer<Customer> { // ①
 
     @Override
     public void configure(Map configs, boolean isKey) {
@@ -785,7 +785,7 @@ public class CustomerDeserializer implements Deserializer<Customer> { ①
             buffer.get(nameBytes);
             name = new String(nameBytes, "UTF-8");
 
-            return new Customer(id, name); ②
+            return new Customer(id, name); // ②
 
         } catch (Exception e) {
   	        throw new SerializationException("Error when deserializing " +   	        "byte[] to Customer " + e);
@@ -849,9 +849,9 @@ props.put("group.id", "CountryCounter");
 props.put("key.deserializer",
     "org.apache.kafka.common.serialization.StringDeserializer");
 props.put("value.deserializer",
-    "io.confluent.kafka.serializers.KafkaAvroDeserializer"); ①
+    "io.confluent.kafka.serializers.KafkaAvroDeserializer"); // ①
 props.put("specific.avro.reader","true");
-props.put("schema.registry.url", schemaUrl); ②
+props.put("schema.registry.url", schemaUrl); // ②
 String topic = "customerContacts"
 
 KafkaConsumer<String, Customer> consumer = new KafkaConsumer<>(props);
@@ -860,11 +860,11 @@ consumer.subscribe(Collections.singletonList(topic));
 System.out.println("Reading topic:" + topic);
 
 while (true) {
-    ConsumerRecords<String, Customer> records = consumer.poll(timeout); ③
+    ConsumerRecords<String, Customer> records = consumer.poll(timeout); // ③
 
     for (ConsumerRecord<String, Customer> record: records) {
         System.out.println("Current customer name is: " +
-            record.value().getName()); ④
+            record.value().getName()); // ④
     }
     consumer.commitSync();
 }
@@ -897,13 +897,13 @@ while (true) {
 ```java
 Duration timeout = Duration.ofMillis(100);
 List<PartitionInfo> partitionInfos = null;
-partitionInfos = consumer.partitionsFor("topic"); ①
+partitionInfos = consumer.partitionsFor("topic"); // ①
 
 if (partitionInfos != null) {
     for (PartitionInfo partition : partitionInfos)
         partitions.add(new TopicPartition(partition.topic(),
             partition.partition()));
-    consumer.assign(partitions); ②
+    consumer.assign(partitions); // ②
 
     while (true) {
         ConsumerRecords<String, String> records = consumer.poll(timeout);

@@ -212,21 +212,21 @@ Kafka 在这种情况下提供的保证类似于 JMS 事务提供的保证，但
 Properties producerProps = new Properties();
 producerProps.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, "localhost:9092");
 producerProps.put(ProducerConfig.CLIENT_ID_CONFIG, "DemoProducer");
-producerProps.put(ProducerConfig.TRANSACTIONAL_ID_CONFIG, transactionalId); ①
+producerProps.put(ProducerConfig.TRANSACTIONAL_ID_CONFIG, transactionalId); // ①
 
 producer = new KafkaProducer<>(producerProps);
 
 Properties consumerProps = new Properties();
 consumerProps.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, "localhost:9092");
 consumerProps.put(ConsumerConfig.GROUP_ID_CONFIG, groupId);
-props.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, "false"); ②
-consumerProps.put(ConsumerConfig.ISOLATION_LEVEL_CONFIG, "read_committed"); ③
+props.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, "false"); // ②
+consumerProps.put(ConsumerConfig.ISOLATION_LEVEL_CONFIG, "read_committed"); // ③
 
 consumer = new KafkaConsumer<>(consumerProps);
 
-producer.initTransactions(); ④
+producer.initTransactions(); // ④
 
-consumer.subscribe(Collections.singleton(inputTopic)); ⑤
+consumer.subscribe(Collections.singleton(inputTopic)); // ⑤
 
 while (true) {
   try {
@@ -275,19 +275,19 @@ while (true) {
 
 我们消费了记录，现在我们想要处理它们并产生结果。这种方法保证了从调用它的时间开始，直到事务被提交或中止，产生的所有内容都是作为单个原子事务的一部分。
 
-// ⑦
+⑦
 
 这是我们处理记录的地方——所有的业务逻辑都在这里。
 
-// ⑧
+⑧
 
 正如我们在本章前面解释的那样，将偏移量作为事务的一部分进行提交非常重要。这可以确保如果我们未能产生结果，我们不会提交那些实际上未被处理的记录的偏移量。这种方法将偏移量作为事务的一部分进行提交。请注意，重要的是不要以任何其他方式提交偏移量——禁用偏移自动提交，并且不要调用任何消费者提交 API。通过任何其他方法提交偏移量都无法提供事务性保证。
 
-// ⑨
+⑨
 
 我们产生了我们需要的一切，我们将偏移量作为事务的一部分进行了提交，现在是时候提交事务并敲定交易了。一旦这个方法成功返回，整个事务就完成了，我们可以继续读取和处理下一批事件。
 
-// ⑩
+⑩
 
 如果我们遇到了这个异常，这意味着我们是僵尸。不知何故，我们的应用程序冻结或断开连接，而有一个具有我们事务 ID 的新应用程序实例正在运行。很可能我们启动的事务已经被中止，其他人正在处理这些记录。除了优雅地死去外，没有别的办法。
 

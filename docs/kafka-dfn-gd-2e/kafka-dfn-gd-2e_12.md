@@ -255,11 +255,11 @@ bin/connect-mirror-maker.sh etc/kafka/connect-mirror-maker.properties
 以下示例显示了在纽约和伦敦两个数据中心之间设置主备复制流的配置选项：
 
 ```java
-clusters = NYC, LON                                 ①
-NYC.bootstrap.servers = kafka.nyc.example.com:9092  ②
+clusters = NYC, LON                                 // ①
+NYC.bootstrap.servers = kafka.nyc.example.com:9092  // ②
 LON.bootstrap.servers = kafka.lon.example.com:9092
-NYC->LON.enabled = true                             ③
-NYC->LON.topics = .*                                ④
+NYC->LON.enabled = true                             // ③
+NYC->LON.topics = .*                                // ④
 ```
 
 ①
@@ -322,10 +322,10 @@ MirrorMaker 支持对其所有组件（包括连接器、生产者、消费者�
 clusters = NYC, LON
 NYC.bootstrap.servers = kafka.nyc.example.com:9092
 LON.bootstrap.servers = kafka.lon.example.com:9092
-NYC->LON.enabled = true                             ①
-NYC->LON.topics = .*                                ②
-LON->NYC.enabled = true                             ③
-LON->NYC.topics = .*                                ④
+NYC->LON.enabled = true                             // ①
+NYC->LON.topics = .*                                // ②
+LON->NYC.enabled = true                             // ③
+LON->NYC.topics = .*                                // ④
 ```
 
 ①
@@ -358,10 +358,10 @@ NYC->SF.topics = .*
 对于生产集群，确保所有跨数据中心流量都是安全的非常重要。用于保护 Kafka 集群的选项在第十一章中有描述。MirrorMaker 必须配置为在源和目标集群中使用安全代理侦听器，并且必须为 MirrorMaker 配置每个集群的客户端端安全选项，以使其能够建立经过身份验证的连接。应使用 SSL 加密所有跨数据中心流量。例如，可以使用以下配置来配置 MirrorMaker 的凭据：
 
 ```java
-NYC.security.protocol=SASL_SSL             ①
+NYC.security.protocol=SASL_SSL             // ①
 NYC.sasl.mechanism=PLAIN
 NYC.sasl.jaas.config=org.apache.kafka.common.security.plain.PlainLoginModule \
-    required username="MirrorMaker" password="MirrorMaker-password";     ②
+    required username="MirrorMaker" password="MirrorMaker-password";     // ②
 ```
 
 ①
