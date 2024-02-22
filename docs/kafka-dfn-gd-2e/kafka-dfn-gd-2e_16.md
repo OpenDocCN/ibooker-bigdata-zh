@@ -396,7 +396,7 @@ KStream<String, String> counts  = source.flatMapValues(value->
         .groupByKey() ④
         .count().mapValues(value->
            Long.toString(value)).toStream();⑤
-counts.to("wordcount-output"); ![6](img/6.png)
+counts.to("wordcount-output"); // ⑥
 ```
 
 ①
@@ -419,7 +419,7 @@ counts.to("wordcount-output"); ![6](img/6.png)
 
 我们计算每个集合中有多少事件。计数的结果是`Long`数据类型。我们将其转换为`String`，这样人类就可以更容易地阅读结果。
 
-![6](img/6.png)
+// ⑥
 
 只剩下一件事——将结果写回 Kafka。
 
@@ -506,13 +506,13 @@ KStream<Windowed<String>, TradeStats> stats = source
         (k, v, tradestats) -> tradestats.add(v), ④
         Materialized.<String, TradeStats, WindowStore<Bytes, byte[]>>
             as("trade-aggregates") ⑤
-           .withValueSerde(new TradeStatsSerde())) ![6](img/6.png)
-    .toStream() ![7](img/7.png)
-    .mapValues((trade) -> trade.computeAvgPrice()); ![8](img/8.png)
+           .withValueSerde(new TradeStatsSerde())) // ⑥
+    .toStream() // ⑦
+    .mapValues((trade) -> trade.computeAvgPrice()); // ⑧
 
 stats.to("stockstats-output",
     Produced.keySerde(
-      WindowedSerdes.timeWindowedSerdeFrom(String.class, windowSize))); ![9](img/9.png)
+      WindowedSerdes.timeWindowedSerdeFrom(String.class, windowSize))); // ⑨
 ```
 
 ①
@@ -535,19 +535,19 @@ stats.to("stockstats-output",
 
 在"流处理设计模式"中提到，窗口聚合需要维护状态和本地存储，其中状态将被维护。聚合方法的最后一个参数是状态存储的配置。`Materialized`是存储配置对象，我们将存储名称配置为`trade-aggregates`。这可以是任何唯一的名称。
 
-![6](img/6.png)
+// ⑥
 
 作为状态存储配置的一部分，我们还提供了一个 Serde 对象，用于序列化和反序列化聚合结果（`Tradestats`对象）。
 
-![7](img/7.png)
+// ⑦
 
 聚合的结果是一个*表*，其中股票和时间窗口是主键，聚合结果是值。我们将表转换回事件流。
 
-![8](img/8.png)
+// ⑧
 
 最后一步是更新平均价格 - 目前聚合结果包括价格总和和交易数量。我们遍历这些记录，并使用现有的统计数据来计算平均价格，以便将其包含在输出流中。
 
-![9](img/9.png)
+// ⑨
 
 最后，我们将结果写回`stockstats-output`流。由于结果是窗口操作的一部分，我们创建了一个`WindowedSerde`，它以包含窗口时间戳的窗口数据格式存储结果。窗口大小作为 Serde 的一部分传递，即使在序列化时没有使用窗口大小（反序列化需要窗口大小，因为输出主题中只存储窗口的开始时间）。
 
@@ -590,13 +590,13 @@ KStream<Integer, UserActivity> userActivityKStream =
     viewsWithProfile.leftJoin(searches, ⑤
       (userActivity, search) -> {
           if (search != null)
-              userActivity.updateSearch(search.getSearchTerms()); ![6](img/6.png)
+              userActivity.updateSearch(search.getSearchTerms()); // ⑥
           else
               userActivity.updateSearch("");
           return userActivity;
       },
-      JoinWindows.of(Duration.ofSeconds(1)).before(Duration.ofSeconds(0)),  ![7](img/7.png)
-                    StreamJoined.with(Serdes.Integer(),  ![8](img/8.png)
+      JoinWindows.of(Duration.ofSeconds(1)).before(Duration.ofSeconds(0)),  // ⑦
+                    StreamJoined.with(Serdes.Integer(),  // ⑧
                                       new UserActivitySerde(),
                                       new SearchSerde()));
 ```
@@ -621,15 +621,15 @@ KStream<Integer, UserActivity> userActivityKStream =
 
 接下来，我们想要将点击信息与同一用户执行的搜索进行`join`。这仍然是左连接，但现在我们要连接两个流，而不是流到表。
 
-![6](img/6.png) (#co_stream_processing_CO5-6)
+// ⑥ (#co_stream_processing_CO5-6)
 
 这是`join`方法——我们只需将搜索词添加到所有匹配的页面查看中。
 
-![7](img/7.png) (#co_stream_processing_CO5-7)
+// ⑦ (#co_stream_processing_CO5-7)
 
 这是有趣的部分 - *流到流连接* 是一个带有时间窗口的连接。连接每个用户的所有点击和搜索并没有太多意义 - 我们希望将每个搜索与与之相关的点击连接起来，也就是发生在搜索后的短时间内的点击。因此，我们定义了一个一秒钟的连接窗口。我们调用 `of` 来创建一个搜索前后一秒钟的窗口，然后我们调用 `before` 以零秒的间隔来确保我们只连接每次搜索后一秒钟发生的点击而不是之前的点击。结果将包括相关的点击、搜索词和用户资料。这将允许对搜索及其结果进行全面分析。
 
-![8](img/8.png)
+// ⑧
 
 我们在这里定义连接结果的 Serde。这包括连接两侧共有的键的 Serde，以及将包含在连接结果中的两个值的 Serde。在这种情况下，键是用户 ID，所以我们使用一个简单的 `Integer` Serde。
 

@@ -233,20 +233,20 @@ while (true) {
     ConsumerRecords<Integer, String> records =
       consumer.poll(Duration.ofMillis(200));
     if (records.count() > 0) {
-      producer.beginTransaction(); ![6](img/6.png)
+      producer.beginTransaction(); // ⑥
       for (ConsumerRecord<Integer, String> record : records) {
-        ProducerRecord<Integer, String> customizedRecord = transform(record); ![7](img/7.png)
+        ProducerRecord<Integer, String> customizedRecord = transform(record); // ⑦
         producer.send(customizedRecord);
       }
       Map<TopicPartition, OffsetAndMetadata> offsets = consumerOffsets();
-      producer.sendOffsetsToTransaction(offsets, consumer.groupMetadata()); ![8](img/8.png)
-      producer.commitTransaction(); ![9](img/9.png)
+      producer.sendOffsetsToTransaction(offsets, consumer.groupMetadata()); // ⑧
+      producer.commitTransaction(); // ⑨
     }
-  } catch (ProducerFencedException|InvalidProducerEpochException e) { ![10](img/10.png)
+  } catch (ProducerFencedException|InvalidProducerEpochException e) { // ⑩
     throw new KafkaException(String.format(
       "The transactional.id %s is used by another process", transactionalId));
   } catch (KafkaException e) {
-    producer.abortTransaction(); ![11](img/11.png)
+    producer.abortTransaction(); // ⑪
     resetToLastCommittedPositions(consumer);
   }}
 ```
@@ -271,27 +271,27 @@ while (true) {
 
 在这里，我们使用`subscribe`消费者 API，这意味着分配给应用程序实例的分区可能会因重新平衡而在任何时候发生变化。在发布 2.5 之前，这是更具挑战性的。事务性生产者必须静态地分配一组分区，因为事务围栏机制依赖于相同的事务 ID 用于相同的分区（如果事务 ID 更改，则没有僵尸围栏保护）。KIP-447 添加了新的 API，用于此示例中，它将消费者组信息附加到事务中，并且此信息用于围栏。使用此方法时，当相关分区被撤销时，提交事务也是有意义的。
 
-![6](img/6.png) (#co_exactly_once_semantics_CO1-6)
+// ⑥ (#co_exactly_once_semantics_CO1-6)
 
 我们消费了记录，现在我们想要处理它们并产生结果。这种方法保证了从调用它的时间开始，直到事务被提交或中止，产生的所有内容都是作为单个原子事务的一部分。
 
-![7](img/7.png)
+// ⑦
 
 这是我们处理记录的地方——所有的业务逻辑都在这里。
 
-![8](img/8.png)
+// ⑧
 
 正如我们在本章前面解释的那样，将偏移量作为事务的一部分进行提交非常重要。这可以确保如果我们未能产生结果，我们不会提交那些实际上未被处理的记录的偏移量。这种方法将偏移量作为事务的一部分进行提交。请注意，重要的是不要以任何其他方式提交偏移量——禁用偏移自动提交，并且不要调用任何消费者提交 API。通过任何其他方法提交偏移量都无法提供事务性保证。
 
-![9](img/9.png)
+// ⑨
 
 我们产生了我们需要的一切，我们将偏移量作为事务的一部分进行了提交，现在是时候提交事务并敲定交易了。一旦这个方法成功返回，整个事务就完成了，我们可以继续读取和处理下一批事件。
 
-![10](img/10.png)
+// ⑩
 
 如果我们遇到了这个异常，这意味着我们是僵尸。不知何故，我们的应用程序冻结或断开连接，而有一个具有我们事务 ID 的新应用程序实例正在运行。很可能我们启动的事务已经被中止，其他人正在处理这些记录。除了优雅地死去外，没有别的办法。
 
-![11](img/11.png)
+// ⑪
 
 如果在写入事务时出现错误，我们可以中止事务，将消费者位置设置回去，然后重试。
 

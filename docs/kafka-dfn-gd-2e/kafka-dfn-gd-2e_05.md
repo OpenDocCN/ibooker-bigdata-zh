@@ -509,7 +509,7 @@ while (true) {
         customer.toString());
     ProducerRecord<String, Customer> record =
         new ProducerRecord<>(topic, customer.getName(), customer); ⑤
-    producer.send(record); ![6](img/6.png)
+    producer.send(record); // ⑥
 }
 ```
 
@@ -533,7 +533,7 @@ while (true) {
 
 我们还使用 `Customer` 作为值类型来实例化 `ProducerRecord`，并在创建新记录时传递一个 `Customer` 对象。
 
-![6](img/6.png)
+// ⑥
 
 就是这样。我们发送包含我们的 `Customer` 对象的记录，`KafkaAvro​Serial⁠izer` 将处理其余部分。
 

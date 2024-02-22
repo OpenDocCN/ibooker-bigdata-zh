@@ -118,7 +118,7 @@ try {
             new NewTopic(TOPIC_NAME, NUM_PARTITIONS, REP_FACTOR))); ⑤
 
     // Check that the topic was created correctly:
-    if (newTopic.numPartitions(TOPIC_NAME).get() != NUM_PARTITIONS) { ![6](img/6.png)
+    if (newTopic.numPartitions(TOPIC_NAME).get() != NUM_PARTITIONS) { // ⑥
         System.out.println("Topic has wrong number of partitions.");
         System.exit(-1);
     }
@@ -145,7 +145,7 @@ try {
 
 如果主题不存在，我们将创建一个新主题。在创建主题时，您可以仅指定名称并对所有细节使用默认值。您还可以指定分区数、副本数和配置。
 
-![6](img/6.png)
+// ⑥
 
 最后，您希望等待主题创建完成，并可能验证结果。在此示例中，我们正在检查分区数。由于我们在创建主题时指定了分区数，我们相当确定它是正确的。如果您在创建主题时依赖经纪人默认值，则更常见地检查结果。请注意，由于我们再次调用`get()`来检查`CreateTopic`的结果，此方法可能会抛出异常。在这种情况下，`TopicExists​Exception`很常见，您需要处理它（也许通过描述主题来检查正确的配置）。
 
@@ -191,7 +191,7 @@ vertx.createHttpServer().requestHandler(request -> { ①
                       request.response().end("Error trying to describe topic "
                               + topic + " due to " + throwable.getMessage()); ⑤
                     } else {
-                        request.response().end(topicDescription.toString()); ![6](img/6.png)
+                        request.response().end(topicDescription.toString()); // ⑥
                     }
                 }
             });
@@ -218,7 +218,7 @@ vertx.createHttpServer().requestHandler(request -> { ①
 
 如果`Future`完成时出现异常，我们会将错误发送给 HTTP 客户端。
 
-![6](img/6.png)
+// ⑥
 
 如果`Future`成功完成，我们将使用主题描述回复客户端。
 
@@ -511,7 +511,7 @@ System.out.println("currently reassigning: " +
         admin.listPartitionReassignments().reassignments().get()); ⑤
 demoTopic = admin.describeTopics(TOPIC_LIST);
 topicDescription = demoTopic.values().get(TOPIC_NAME).get();
-System.out.println("Description of demo topic:" + topicDescription); ![6](img/6.png)
+System.out.println("Description of demo topic:" + topicDescription); // ⑥
 ```
 
 ①
@@ -534,7 +534,7 @@ System.out.println("Description of demo topic:" + topicDescription); ![6](img/6.
 
 我们可以列出正在进行的重新分配。
 
-![6](img/6.png)
+// ⑥
 
 我们也可以打印新状态，但请记住，直到显示一致的结果可能需要一段时间。
 
