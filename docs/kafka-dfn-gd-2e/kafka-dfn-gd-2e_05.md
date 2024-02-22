@@ -56,7 +56,17 @@ Apache Kafka 附带了内置的客户端 API，开发人员在开发与 Kafka �
 
 以下代码片段显示了如何通过仅设置必填参数并对其他所有内容使用默认值来创建新的生产者：
 
-[PRE0]
+```java
+Properties kafkaProps = new Properties(); ①
+kafkaProps.put("bootstrap.servers", "broker1:9092,broker2:9092");
+
+kafkaProps.put("key.serializer",
+    "org.apache.kafka.common.serialization.StringSerializer"); ②
+kafkaProps.put("value.serializer",
+    "org.apache.kafka.common.serialization.StringSerializer");
+
+producer = new KafkaProducer<String, String>(kafkaProps); ③
+```
 
 ①
 
@@ -94,7 +104,16 @@ Apache Kafka 附带了内置的客户端 API，开发人员在开发与 Kafka �
 
 发送消息的最简单方法如下：
 
-[PRE1]
+```java
+ProducerRecord<String, String> record =
+    new ProducerRecord<>("CustomerCountry", "Precision Products",
+        "France"); ①
+try {
+    producer.send(record); ②
+} catch (Exception e) {
+    e.printStackTrace(); ③
+}
+```
 
 ①
 
@@ -114,7 +133,15 @@ Apache Kafka 附带了内置的客户端 API，开发人员在开发与 Kafka �
 
 同步发送消息的最简单方法如下：
 
-[PRE2]
+```java
+ProducerRecord<String, String> record =
+    new ProducerRecord<>("CustomerCountry", "Precision Products", "France");
+try {
+    producer.send(record).get(); ①
+} catch (Exception e) {
+    e.printStackTrace(); ②
+}
+```
 
 ①
 
@@ -132,7 +159,20 @@ Apache Kafka 附带了内置的客户端 API，开发人员在开发与 Kafka �
 
 要异步发送消息并仍然处理错误情况，生产者支持在发送记录时添加回调。以下是我们如何使用回调的示例：
 
-[PRE3]
+```java
+private class DemoProducerCallback implements Callback { ①
+    @Override
+    public void onCompletion(RecordMetadata recordMetadata, Exception e) {
+        if (e != null) {
+            e.printStackTrace(); ②
+        }
+    }
+}
+
+ProducerRecord<String, String> record =
+    new ProducerRecord<>("CustomerCountry", "Biomedical Materials", "USA"); ③
+producer.send(record, new DemoProducerCallback()); ④
+```
 
 ①
 
@@ -298,11 +338,83 @@ Apache Kafka 保留分区内消息的顺序。这意味着如果消息按特定�
 
 假设我们不仅仅记录客户的姓名，而是创建一个简单的类来表示客户：
 
-[PRE4]
+```java
+public class Customer {
+    private int customerID;
+    private String customerName;
+
+    public Customer(int ID, String name) {
+        this.customerID = ID;
+        this.customerName = name;
+    }
+
+    public int getID() {
+        return customerID;
+    }
+
+    public String getName() {
+        return customerName;
+    }
+}
+```
 
 现在假设我们想为这个类创建一个自定义的序列化程序。它看起来会像这样：
 
-[PRE5]
+```java
+import org.apache.kafka.common.errors.SerializationException;
+
+import java.nio.ByteBuffer;
+import java.util.Map;
+
+public class CustomerSerializer implements Serializer<Customer> {
+
+    @Override
+    public void configure(Map configs, boolean isKey) {
+        // nothing to configure
+    }
+
+    @Override
+    /**
+    We are serializing Customer as:
+    4 byte int representing customerId
+    4 byte int representing length of customerName in UTF-8 bytes (0 if
+        name is Null)
+    N bytes representing customerName in UTF-8
+    **/
+    public byte[] serialize(String topic, Customer data) {
+        try {
+            byte[] serializedName;
+            int stringSize;
+            if (data == null)
+                return null;
+            else {
+                if (data.getName() != null) {
+                    serializedName = data.getName().getBytes("UTF-8");
+                    stringSize = serializedName.length;
+                } else {
+                    serializedName = new byte[0];
+                    stringSize = 0;
+                }
+            }
+
+            ByteBuffer buffer = ByteBuffer.allocate(4 + 4 + stringSize);
+            buffer.putInt(data.getID());
+            buffer.putInt(stringSize);
+            buffer.put(serializedName);
+
+            return buffer.array();
+        } catch (Exception e) {
+            throw new SerializationException(
+                "Error when serializing Customer to byte[] " + e);
+        }
+    }
+
+    @Override
+    public void close() {
+        // nothing to close
+    }
+}
+```
 
 使用这个`CustomerSerializer`配置生产者将允许您定义`ProducerRecord<String, Customer>`，并发送`Customer`数据并直接将`Customer`对象传递给生产者。这个例子很简单，但您可以看到代码是多么脆弱。例如，如果我们有太多的客户，并且需要将`customerID`更改为`Long`，或者如果我们决定向`Customer`添加一个`startDate`字段，那么在维护旧消息和新消息之间的兼容性方面将会出现严重问题。在不同版本的序列化程序和反序列化程序之间调试兼容性问题是相当具有挑战性的：您需要比较原始字节数组。更糟糕的是，如果同一家公司的多个团队最终都向 Kafka 写入`Customer`数据，他们都需要使用相同的序列化程序并同时修改代码。
 
@@ -318,7 +430,17 @@ Avro 最有趣的特性之一，也是使其适合在 Kafka 等消息系统中�
 
 假设原始模式是：
 
-[PRE6]
+```java
+{"namespace": "customerManagement.avro",
+ "type": "record",
+ "name": "Customer",
+ "fields": [
+     {"name": "id", "type": "int"},
+     {"name": "name",  "type": "string"},
+     {"name": "faxNumber", "type": ["null", "string"], "default": "null"} ①
+ ]
+}
+```
 
 ①
 
@@ -328,7 +450,17 @@ Avro 最有趣的特性之一，也是使其适合在 Kafka 等消息系统中�
 
 新模式将是：
 
-[PRE7]
+```java
+{"namespace": "customerManagement.avro",
+ "type": "record",
+ "name": "Customer",
+ "fields": [
+     {"name": "id", "type": "int"},
+     {"name": "name",  "type": "string"},
+     {"name": "email", "type": ["null", "string"], "default": "null"}
+ ]
+}
+```
 
 现在，在升级到新版本后，旧记录将包含`faxNumber`，新记录将包含`email`。在许多组织中，升级是缓慢进行的，需要花费很多个月的时间。因此，我们需要考虑如何处理仍然使用传真号码的升级前应用程序和使用电子邮件的升级后应用程序在 Kafka 中的所有事件。
 
@@ -356,7 +488,30 @@ Avro 最有趣的特性之一，也是使其适合在 Kafka 等消息系统中�
 
 以下是如何将生成的 Avro 对象发送到 Kafka 的示例（请参阅 [Avro 文档](https://oreil.ly/klcjK) 了解如何从 Avro 模式生成对象）：
 
-[PRE8]
+```java
+Properties props = new Properties();
+
+props.put("bootstrap.servers", "localhost:9092");
+props.put("key.serializer",
+   "io.confluent.kafka.serializers.KafkaAvroSerializer");
+props.put("value.serializer",
+   "io.confluent.kafka.serializers.KafkaAvroSerializer"); ①
+props.put("schema.registry.url", schemaUrl); ②
+
+String topic = "customerContacts";
+
+Producer<String, Customer> producer = new KafkaProducer<>(props); ③
+
+// We keep producing new events until someone ctrl-c
+while (true) {
+    Customer customer = CustomerGenerator.getNext(); ④
+    System.out.println("Generated customer " +
+        customer.toString());
+    ProducerRecord<String, Customer> record =
+        new ProducerRecord<>(topic, customer.getName(), customer); ⑤
+    producer.send(record); ![6](img/6.png)
+}
+```
 
 ①
 
@@ -384,7 +539,45 @@ Avro 最有趣的特性之一，也是使其适合在 Kafka 等消息系统中�
 
 Avro 还允许您使用通用 Avro 对象，这些对象用作键值映射，而不是具有与用于生成它们的模式匹配的 getter 和 setter 的生成的 Avro 对象。要使用通用 Avro 对象，您只需要提供模式：
 
-[PRE9]
+```java
+Properties props = new Properties();
+props.put("bootstrap.servers", "localhost:9092");
+props.put("key.serializer",
+   "io.confluent.kafka.serializers.KafkaAvroSerializer"); ①
+props.put("value.serializer",
+   "io.confluent.kafka.serializers.KafkaAvroSerializer");
+props.put("schema.registry.url", url); ②
+
+String schemaString =
+    "{\"namespace\": \"customerManagement.avro\",
+     "\"type\": \"record\", " + ③
+     "\"name\": \"Customer\"," +
+     "\"fields\": [" +
+      "{\"name\": \"id\", \"type\": \"int\"}," +
+      "{\"name\": \"name\", \"type\": \"string\"}," +
+      "{\"name\": \"email\", \"type\": " + "[\"null\",\"string\"], " +
+       "\"default\":\"null\" }" +
+    "]}";
+Producer<String, GenericRecord> producer =
+   new KafkaProducer<String, GenericRecord>(props); ④
+
+Schema.Parser parser = new Schema.Parser();
+Schema schema = parser.parse(schemaString);
+
+for (int nCustomers = 0; nCustomers < customers; nCustomers++) {
+    String name = "exampleCustomer" + nCustomers;
+    String email = "example " + nCustomers + "@example.com";
+
+    GenericRecord customer = new GenericData.Record(schema); ⑤
+    customer.put("id", nCustomers);
+    customer.put("name", name);
+    customer.put("email", email);
+
+    ProducerRecord<String, GenericRecord> data =
+        new ProducerRecord<>("customerContacts", name, customer);
+    producer.send(data);
+}
+```
 
 ①
 
@@ -410,11 +603,17 @@ Avro 还允许您使用通用 Avro 对象，这些对象用作键值映射，而
 
 在先前的示例中，我们创建的`ProducerRecord`对象包括主题名称、键和值。Kafka 消息是键值对，虽然可以只使用主题和值创建`ProducerRecord`，并且默认情况下将键设置为`null`，但大多数应用程序都会生成带有键的记录。键有两个目标：它们是存储在消息中的附加信息，通常也用于决定消息将写入哪个主题分区（键在压缩主题中也起着重要作用，我们将在第六章中讨论这些内容）。具有相同键的所有消息将进入同一分区。这意味着如果进程只读取主题中的一部分分区（有关详细信息，请参阅第四章），则单个键的所有记录将由同一进程读取。要创建键值记录，只需创建`ProducerRecord`如下所示：
 
-[PRE10]
+```java
+ProducerRecord<String, String> record =
+    new ProducerRecord<>("CustomerCountry", "Laboratory Equipment", "USA");
+```
 
 在创建具有空键的消息时，可以简单地将键省略：
 
-[PRE11]
+```java
+ProducerRecord<String, String> record =
+    new ProducerRecord<>("CustomerCountry", "USA"); ①
+```
 
 ①
 
@@ -434,7 +633,37 @@ Avro 还允许您使用通用 Avro 对象，这些对象用作键值映射，而
 
 以下是一个自定义分区器的示例：
 
-[PRE12]
+```java
+import org.apache.kafka.clients.producer.Partitioner;
+import org.apache.kafka.common.Cluster;
+import org.apache.kafka.common.PartitionInfo;
+import org.apache.kafka.common.record.InvalidRecordException;
+import org.apache.kafka.common.utils.Utils;
+
+public class BananaPartitioner implements Partitioner {
+
+    public void configure(Map<String, ?> configs) {} ①
+
+    public int partition(String topic, Object key, byte[] keyBytes,
+                         Object value, byte[] valueBytes,
+                         Cluster cluster) {
+        List<PartitionInfo> partitions = cluster.partitionsForTopic(topic);
+        int numPartitions = partitions.size();
+
+        if ((keyBytes == null) || (!(key instanceOf String))) ②
+            throw new InvalidRecordException("We expect all messages " +
+                "to have customer name as key");
+
+        if (((String) key).equals("Banana"))
+            return numPartitions - 1; // Banana will always go to last partition
+
+        // Other records will get hashed to the rest of the partitions
+        return Math.abs(Utils.murmur2(keyBytes)) % (numPartitions - 1);
+    }
+
+    public void close() {}
+}
+```
 
 ①
 
@@ -452,7 +681,12 @@ Avro 还允许您使用通用 Avro 对象，这些对象用作键值映射，而
 
 以下是一个小例子，展示了如何向`ProduceRecord`添加头：
 
-[PRE13]
+```java
+ProducerRecord<String, String> record =
+    new ProducerRecord<>("CustomerCountry", "Precision Products", "France");
+
+record.headers().add("privacy-level","YOLO".getBytes(StandardCharsets.UTF_8));
+```
 
 # 拦截器
 
@@ -472,7 +706,41 @@ Kafka 的`ProducerInterceptor`拦截器包括两个关键方法：
 
 这是一个非常简单的生产者拦截器示例。这个示例只是在特定时间窗口内计算发送的消息和接收的确认：
 
-[PRE14]
+```java
+public class CountingProducerInterceptor implements ProducerInterceptor {
+
+  ScheduledExecutorService executorService =
+          Executors.newSingleThreadScheduledExecutor();
+  static AtomicLong numSent = new AtomicLong(0);
+  static AtomicLong numAcked = new AtomicLong(0);
+
+  public void configure(Map<String, ?> map) {
+      Long windowSize = Long.valueOf(
+              (String) map.get("counting.interceptor.window.size.ms")); ①
+      executorService.scheduleAtFixedRate(CountingProducerInterceptor::run,
+              windowSize, windowSize, TimeUnit.MILLISECONDS);
+  }
+
+  public ProducerRecord onSend(ProducerRecord producerRecord) {
+      numSent.incrementAndGet();
+      return producerRecord; ②
+  }
+
+  public void onAcknowledgement(RecordMetadata recordMetadata, Exception e) {
+      numAcked.incrementAndGet(); ③
+  }
+
+  public void close() {
+      executorService.shutdownNow(); ④
+  }
+
+  public static void run() {
+      System.out.println(numSent.getAndSet(0));
+      System.out.println(numAcked.getAndSet(0));
+  }
+
+}
+```
 
 ①
 
@@ -518,7 +786,13 @@ Kafka 代理有能力限制消息的生产和消费速率。这是通过配额�
 
 让我们看几个例子：
 
-[PRE15]
+```java
+bin/kafka-configs  --bootstrap-server localhost:9092 --alter --add-config 'producer_byte_rate=1024' --entity-name clientC --entity-type clients ①
+
+bin/kafka-configs  --bootstrap-server localhost:9092 --alter --add-config 'producer_byte_rate=1024,consumer_byte_rate=2048' --entity-name user1 --entity-type users ②
+
+bin/kafka-configs  --bootstrap-server localhost:9092 --alter --add-config 'consumer_byte_rate=2048' --entity-type users ③
+```
 
 ①
 

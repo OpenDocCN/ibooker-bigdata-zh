@@ -178,7 +178,25 @@ Kafka 集群中控制器的问题要难以诊断得多，通常属于 Kafka 本�
 
 例如，在集群中列出未复制的分区：
 
-[PRE0]
+```java
+# kafka-topics.sh --bootstrap-server kafka1.example.com:9092/kafka-cluster
+--describe --under-replicated
+    Topic: topicOne   Partition: 5    Leader: 1    Replicas: 1,2 Isr: 1
+    Topic: topicOne   Partition: 6    Leader: 3    Replicas: 2,3 Isr: 3
+    Topic: topicTwo   Partition: 3    Leader: 4    Replicas: 2,4 Isr: 4
+    Topic: topicTwo   Partition: 7    Leader: 5    Replicas: 5,2 Isr: 5
+    Topic: topicSix   Partition: 1    Leader: 3    Replicas: 2,3 Isr: 3
+    Topic: topicSix   Partition: 2    Leader: 1    Replicas: 1,2 Isr: 1
+    Topic: topicSix   Partition: 5    Leader: 6    Replicas: 2,6 Isr: 6
+    Topic: topicSix   Partition: 7    Leader: 7    Replicas: 7,2 Isr: 7
+    Topic: topicNine  Partition: 1    Leader: 1    Replicas: 1,2 Isr: 1
+    Topic: topicNine  Partition: 3    Leader: 3    Replicas: 2,3 Isr: 3
+    Topic: topicNine  Partition: 4    Leader: 3    Replicas: 3,2 Isr: 3
+    Topic: topicNine  Partition: 7    Leader: 3    Replicas: 2,3 Isr: 3
+    Topic: topicNine  Partition: 0    Leader: 3    Replicas: 2,3 Isr: 3
+    Topic: topicNine  Partition: 5    Leader: 6    Replicas: 6,2 Isr: 6
+#
+```
 
 在这个例子中，常见的经纪人是编号 2。这表明这个经纪人在消息复制方面存在问题，将导致我们将调查重点放在这个经纪人身上。如果没有常见的经纪人，那么很可能是整个集群出现了问题。
 

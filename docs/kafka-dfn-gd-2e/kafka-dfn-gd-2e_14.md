@@ -40,13 +40,22 @@ Kafka 的许多命令行工具对 Kafka 运行的版本有依赖，以正确运�
 
 创建一个新主题很简单。运行`kafka-topics.sh`如下：
 
-[PRE0]
+```java
+# kafka-topics.sh --bootstrap-server <connection-string>:<port> --create --topic <string>
+--replication-factor <integer> --partitions <integer>
+#
+```
 
 该命令将导致集群创建一个具有指定名称和分区数的主题。对于每个分区，集群将适当地选择指定数量的副本。这意味着如果集群设置为机架感知副本分配，每个分区的副本将位于不同的机架上。如果不希望使用机架感知分配，指定`--disable-rack-aware`命令行参数。
 
 例如，创建一个名为“my-topic”的主题，其中每个有两个副本的八个分区：
 
-[PRE1]
+```java
+# kafka-topics.sh --bootstrap-server localhost:9092 --create
+--topic my-topic --replication-factor 2 --partitions 8
+Created topic "my-topic".
+#
+```
 
 # 正确使用 if-exists 和 if-not-exists 参数
 
@@ -60,7 +69,12 @@ Kafka 的许多命令行工具对 Kafka 运行的版本有依赖，以正确运�
 
 以下是使用`--list`选项列出集群中所有主题的示例：
 
-[PRE2]
+```java
+# kafka-topics.sh --bootstrap-server localhost:9092 --list
+__consumer_offsets
+my-topic
+other-topic
+```
 
 您会注意到内部的`__consumer_offsets`主题在这里列出。使用`--exclude-internal`运行命令将从列表中删除所有以前提到的双下划线开头的主题，这可能是有益的。
 
@@ -70,7 +84,19 @@ Kafka 的许多命令行工具对 Kafka 运行的版本有依赖，以正确运�
 
 例如，在集群中描述我们最近创建的“my-topic”：
 
-[PRE3]
+```java
+# kafka-topics.sh --boostrap-server localhost:9092 --describe --topic my-topic
+Topic: my-topic	PartitionCount: 8	ReplicationFactor: 2	Configs: segment.bytes=1073741824
+ Topic: my-topic	Partition: 0	Leader: 1	Replicas: 1,0	Isr: 1,0
+ Topic: my-topic	Partition: 1	Leader: 0	Replicas: 0,1	Isr: 0,1
+ Topic: my-topic	Partition: 2	Leader: 1	Replicas: 1,0	Isr: 1,0
+ Topic: my-topic	Partition: 3	Leader: 0	Replicas: 0,1	Isr: 0,1
+ Topic: my-topic	Partition: 4	Leader: 1	Replicas: 1,0	Isr: 1,0
+ Topic: my-topic	Partition: 5	Leader: 0	Replicas: 0,1	Isr: 0,1
+ Topic: my-topic	Partition: 6	Leader: 1	Replicas: 1,0	Isr: 1,0
+ Topic: my-topic	Partition: 7	Leader: 0	Replicas: 0,1	Isr: 0,1
+#
+```
 
 `--describe`命令还有几个有用的选项用于过滤输出。这些对于更容易诊断集群问题很有帮助。对于这些命令，我们通常不指定`--topic`参数，因为意图是找到所有符合条件的集群中的主题或分区。这些选项不适用于`list`命令。以下是一些有用的配对列表：
 
@@ -102,7 +128,18 @@ Kafka 的许多命令行工具对 Kafka 运行的版本有依赖，以正确运�
 
 以下是一个查找处于最小 ISR 设置的主题的示例。在此示例中，主题配置为最小 ISR 为 1，并且副本因子（RF）为 2。主机 0 在线，主机 1 已停机进行维护：
 
-[PRE4]
+```java
+# kafka-topics.sh --bootstrap-server localhost:9092 --describe --at-min-isr-partitions
+ Topic: my-topic Partition: 0    Leader: 0       Replicas: 0,1   Isr: 0
+ Topic: my-topic Partition: 1    Leader: 0       Replicas: 0,1   Isr: 0
+ Topic: my-topic Partition: 2    Leader: 0       Replicas: 0,1   Isr: 0
+ Topic: my-topic Partition: 3    Leader: 0       Replicas: 0,1   Isr: 0
+ Topic: my-topic Partition: 4    Leader: 0       Replicas: 0,1   Isr: 0
+ Topic: my-topic Partition: 5    Leader: 0       Replicas: 0,1   Isr: 0
+ Topic: my-topic Partition: 6    Leader: 0       Replicas: 0,1   Isr: 0
+ Topic: my-topic Partition: 7    Leader: 0       Replicas: 0,1   Isr: 0
+#
+```
 
 ## 添加分区
 
@@ -110,7 +147,30 @@ Kafka 的许多命令行工具对 Kafka 运行的版本有依赖，以正确运�
 
 以下是一个示例，使用`--alter`命令将名为“my-topic”的主题的分区数增加到 16，然后验证它是否起作用：
 
-[PRE5]
+```java
+# kafka-topics.sh --bootstrap-server localhost:9092
+--alter --topic my-topic --partitions 16
+
+# kafka-topics.sh --bootstrap-server localhost:9092 --describe --topic my-topic
+Topic: my-topic	PartitionCount: 16	ReplicationFactor: 2	Configs: segment.bytes=1073741824
+ Topic: my-topic	Partition: 0	Leader: 1	Replicas: 1,0	Isr: 1,0
+ Topic: my-topic	Partition: 1	Leader: 0	Replicas: 0,1	Isr: 0,1
+ Topic: my-topic	Partition: 2	Leader: 1	Replicas: 1,0	Isr: 1,0
+ Topic: my-topic	Partition: 3	Leader: 0	Replicas: 0,1	Isr: 0,1
+ Topic: my-topic	Partition: 4	Leader: 1	Replicas: 1,0	Isr: 1,0
+ Topic: my-topic	Partition: 5	Leader: 0	Replicas: 0,1	Isr: 0,1
+ Topic: my-topic	Partition: 6	Leader: 1	Replicas: 1,0	Isr: 1,0
+ Topic: my-topic	Partition: 7	Leader: 0	Replicas: 0,1	Isr: 0,1
+ Topic: my-topic	Partition: 8	Leader: 1	Replicas: 1,0	Isr: 1,0
+ Topic: my-topic	Partition: 9	Leader: 0	Replicas: 0,1	Isr: 0,1
+ Topic: my-topic	Partition: 10	Leader: 1	Replicas: 1,0	Isr: 1,0
+ Topic: my-topic	Partition: 11	Leader: 0	Replicas: 0,1	Isr: 0,1
+ Topic: my-topic	Partition: 12	Leader: 1	Replicas: 1,0	Isr: 1,0
+ Topic: my-topic	Partition: 13	Leader: 0	Replicas: 0,1	Isr: 0,1
+ Topic: my-topic	Partition: 14	Leader: 1	Replicas: 1,0	Isr: 1,0
+ Topic: my-topic	Partition: 15	Leader: 0	Replicas: 0,1	Isr: 0,1
+#
+```
 
 # 调整带键主题
 
@@ -132,7 +192,14 @@ Kafka 的许多命令行工具对 Kafka 运行的版本有依赖，以正确运�
 
 以下是使用`--delete`参数删除名为“my-topic”的主题的示例。根据 Kafka 的版本，将会有一条说明，让您知道如果没有设置其他配置，则该参数将不起作用：
 
-[PRE6]
+```java
+# kafka-topics.sh --bootstrap-server localhost:9092
+--delete --topic my-topic
+
+Note: This will have no impact if delete.topic.enable is not set
+to true.
+#
+```
 
 您会注意到没有明显的反馈表明主题删除是否成功完成。通过运行`--list`或`--describe`选项来验证删除是否成功，以查看主题是否不再存在于集群中。
 
@@ -148,13 +215,27 @@ Kafka 的许多命令行工具对 Kafka 运行的版本有依赖，以正确运�
 
 要列出消费者组，请使用`--bootstrap-server`和`--list`参数。使用`kafka-consumer-groups.sh`脚本的特定消费者将显示为消费者列表中的`console-consumer-*<generated_id>*`：
 
-[PRE7]
+```java
+# kafka-consumer-groups.sh --bootstrap-server localhost:9092 --list
+console-consumer-95554
+console-consumer-9581
+my-consumer
+#
+```
 
 对于列出的任何组，可以通过将`--list`参数更改为`--describe`并添加`--group`参数来获取更多详细信息。这将列出该组正在从中消费的所有主题和分区，以及其他信息，例如每个主题分区的偏移量。表 12-1 对输出中提供的所有字段进行了全面描述。
 
 例如，获取名为“my-consumer”的特定组的消费者组详细信息：
 
-[PRE8]
+```java
+# kafka-consumer-groups.sh --bootstrap-server localhost:9092
+--describe --group my-consumer
+GROUP          TOPIC          PARTITION  CURRENT-OFFSET  LOG-END-OFFSET  LAG        CONSUMER-ID                                       HOST                           CLIENT-ID
+my-consumer     my-topic       0          2               4               2          consumer-1-029af89c-873c-4751-a720-cefd41a669d6   /127.0.0.1                     consumer-1
+my-consumer     my-topic       1          2               3               1          consumer-1-029af89c-873c-4751-a720-cefd41a669d6   /127.0.0.1                     consumer-1
+my-consumer     my-topic       2          2               3               1          consumer-2-42c1abd4-e3b2-425d-a8bb-e1ea49b29bb2   /127.0.0.1                     consumer-2
+#
+```
 
 表 12-1。为名为“my-consumer”的组提供的字段
 
@@ -184,7 +265,11 @@ Kafka 的许多命令行工具对 Kafka 运行的版本有依赖，以正确运�
 
 以下是删除名为“my-consumer”的整个消费者组的示例：
 
-[PRE9]
+```java
+# kafka-consumer-groups.sh --bootstrap-server localhost:9092 --delete --group my-consumer
+Deletion of requested consumer groups ('my-consumer') was successful.
+#
+```
 
 ## 偏移管理
 
@@ -200,7 +285,22 @@ Kafka 的许多命令行工具对 Kafka 运行的版本有依赖，以正确运�
 
 以下是导出主题“my-topic”被消费者组“my-consumer”消费的偏移量的示例，导出到名为*offsets.csv*的文件中：
 
-[PRE10]
+```java
+# kafka-consumer-groups.sh --bootstrap-server localhost:9092
+--export --group my-consumer --topic my-topic
+--reset-offsets --to-current --dry-run > offsets.csv
+
+# cat offsets.csv
+my-topic,0,8905
+my-topic,1,8915
+my-topic,2,9845
+my-topic,3,8072
+my-topic,4,8008
+my-topic,5,8319
+my-topic,6,8102
+my-topic,7,12739
+#
+```
 
 ### 导入偏移量
 
@@ -212,7 +312,21 @@ Kafka 的许多命令行工具对 Kafka 运行的版本有依赖，以正确运�
 
 在以下示例中，我们从上一个示例中创建的名为*offsets.csv*的文件中导入名为“my-consumer”的消费者组的偏移量：
 
-[PRE11]
+```java
+# kafka-consumer-groups.sh --bootstrap-server localhost:9092
+--reset-offsets --group my-consumer
+--from-file offsets.csv --execute
+ TOPIC                          PARTITION  NEW-OFFSET
+ my-topic                        0          8905
+ my-topic                        1          8915
+ my-topic                        2          9845
+ my-topic                        3          8072
+ my-topic                        4          8008
+ my-topic                        5          8319
+ my-topic                        6          8102
+ my-topic                        7          12739
+#
+```
 
 # 动态配置更改
 
@@ -224,11 +338,21 @@ Kafka 的许多命令行工具对 Kafka 运行的版本有依赖，以正确运�
 
 更改主题配置的命令格式如下：
 
-[PRE12]
+```java
+kafka-configs.sh --bootstrap-server localhost:9092
+--alter --entity-type topics --entity-name <topic-name>
+--add-config <key>=<value>[,<key>=<value>...]
+```
 
 以下是将名为“my-topic”的主题保留设置为 1 小时（3,600,000 毫秒）的示例：
 
-[PRE13]
+```java
+# kafka-configs.sh --bootstrap-server localhost:9092
+--alter --entity-type topics --entity-name my-topic
+--add-config retention.ms=3600000
+Updated config for topic: "my-topic".
+#
+```
 
 表 12-2\. 主题的有效键
 
@@ -284,7 +408,13 @@ Kafka 的许多命令行工具对 Kafka 运行的版本有依赖，以正确运�
 
 可以一次指定兼容的用户和客户端配置更改，以适用于两者的兼容配置。以下是一种在一个配置步骤中更改用户和客户端的控制器变异速率的命令示例：
 
-[PRE14]
+```java
+# kafka-configs.sh --bootstrap-server localhost:9092
+--alter --add-config "controller_mutations_rate=10"
+--entity-type clients --entity-name <client ID>
+--entity-type users --entity-name <user ID>
+#
+```
 
 ## 覆盖代理配置默认值
 
@@ -308,7 +438,13 @@ Kafka 的许多命令行工具对 Kafka 运行的版本有依赖，以正确运�
 
 在以下示例中，我们可以获取名为“my-topic”的主题的所有配置覆盖，我们观察到只有保留时间：
 
-[PRE15]
+```java
+# kafka-configs.sh --bootstrap-server localhost:9092
+--describe --entity-type topics --entity-name my-topic
+Configs for topics:my-topic are
+retention.ms=3600000
+#
+```
 
 # 仅主题覆盖
 
@@ -320,7 +456,13 @@ Kafka 的许多命令行工具对 Kafka 运行的版本有依赖，以正确运�
 
 例如，删除名为“my-topic”的主题的`retention.ms`的配置覆盖：
 
-[PRE16]
+```java
+# kafka-configs.sh --bootstrap-server localhost:9092
+--alter --entity-type topics --entity-name my-topic
+--delete-config retention.ms
+Updated config for topic: "my-topic".
+#
+```
 
 # 生产和消费
 
@@ -338,7 +480,15 @@ Kafka 的许多命令行工具对 Kafka 运行的版本有依赖，以正确运�
 
 在这里，我们可以看到一个将四条消息发送到名为“my-topic”的主题的示例：
 
-[PRE17]
+```java
+# kafka-console-producer.sh --bootstrap-server localhost:9092 --topic my-topic
+>Message 1
+>Test Message 2
+>Test Message 3
+>Message 4
+>^D
+#
+```
 
 ### 使用生产者配置选项
 
@@ -408,7 +558,16 @@ Kafka 的许多命令行工具对 Kafka 运行的版本有依赖，以正确运�
 
 先前的选项中只能选择并使用一个。一旦控制台消费者启动，工具将继续尝试消费，直到给出 shell 转义命令（在这种情况下为 Ctrl-C）。以下是一个示例，消费与前缀*my*匹配的集群中的所有主题（在此示例中只有一个，“my-topic”）：
 
-[PRE18]
+```java
+# kafka-console-consumer.sh --bootstrap-server localhost:9092
+--whitelist 'my.*' --from-beginning
+Message 1
+Test Message 2
+Test Message 3
+Message 4
+^C
+#
+```
 
 ### 使用消费者配置选项
 
@@ -458,7 +617,16 @@ Kafka 的许多命令行工具对 Kafka 运行的版本有依赖，以正确运�
 
 以下是一个示例，消费与之前相同的消息，但使用 `kafka.tools.ChecksumMessageFormatter` 而不是默认值：
 
-[PRE19]
+```java
+# kafka-console-consumer.sh --bootstrap-server localhost:9092
+--whitelist 'my.*' --from-beginning
+--formatter kafka.tools.ChecksumMessageFormatter
+checksum:0
+checksum:0
+checksum:0
+checksum:0
+#
+```
 
 `kafka.tools.DefaultMessageFormatter` 还有一些有用的选项，可以使用 `--property` 命令行选项传递，如 表 12-4 中所示。
 
@@ -483,7 +651,16 @@ Kafka 的许多命令行工具对 Kafka 运行的版本有依赖，以正确运�
 
 将我们学到的所有知识整合在一起，以下是从`__consumer_offsets`主题中消费最早消息的示例：
 
-[PRE20]
+```java
+# kafka-console-consumer.sh --bootstrap-server localhost:9092
+--topic __consumer_offsets --from-beginning --max-messages 1
+--formatter "kafka.coordinator.group.GroupMetadataManager\$OffsetsMessageFormatter"
+--consumer-property exclude.internal.topics=false
+[my-group-name,my-topic,0]::[OffsetMetadata[1,NO_METADATA]
+CommitTime 1623034799990 ExpirationTime 1623639599990]
+Processed a total of 1 messages
+#
+```
 
 # 分区管理
 
@@ -499,15 +676,36 @@ Kafka 的许多命令行工具对 Kafka 运行的版本有依赖，以正确运�
 
 作为一个例子，在集群中为所有主题启动首选领导者选举可以使用以下命令执行：
 
-[PRE21]
+```java
+# kafka-leader-election.sh --bootstrap-server localhost:9092
+--election-type PREFERRED --all-topic-partitions
+#
+```
 
 也可以在特定分区或主题上启动选举。这可以通过使用`--topic`选项和`--partition`选项直接传入主题名称和分区来完成。还可以传入要选举的多个分区的列表。这可以通过配置一个我们称之为*partitions.json*的 JSON 文件来完成：
 
-[PRE22]
+```java
+{
+    "partitions": [
+        {
+            "partition": 1,
+            "topic": "my-topic"
+        },
+        {
+            "partition": 2,
+            "topic": "foo"
+        }
+    ]
+}
+```
 
 在这个例子中，我们将使用名为*partitions.json*的文件启动首选副本选举，指定了一个分区列表：
 
-[PRE23]
+```java
+# kafka-leader-election.sh --bootstrap-server localhost:9092
+--election-type PREFERRED --path-to-json-file partitions.json
+#
+```
 
 ## 更改分区的副本
 
@@ -527,17 +725,79 @@ Kafka 的许多命令行工具对 Kafka 运行的版本有依赖，以正确运�
 
 要生成一组分区移动，首先必须创建一个包含列出主题的 JSON 对象的文件。JSON 对象的格式如下（版本号目前始终为 1）：
 
-[PRE24]
+```java
+{
+    "topics": [
+        {
+            "topic": "foo1"
+        },
+        {
+            "topic": "foo2"
+        }
+    ],
+    "version": 1
+}
+```
 
 一旦我们定义了 JSON 文件，我们可以使用它来生成一组分区移动，将文件*topics.json*中列出的主题移动到 ID 为 5 和 6 的经纪人：
 
-[PRE25]
+```java
+# kafka-reassign-partitions.sh --bootstrap-server localhost:9092
+--topics-to-move-json-file topics.json
+--broker-list 5,6 --generate
+ {"version":1,
+ "partitions":[{"topic":"foo1","partition":2,"replicas":[1,2]},
+ {"topic":"foo1","partition":0,"replicas":[3,4]},
+ {"topic":"foo2","partition":2,"replicas":[1,2]},
+ {"topic":"foo2","partition":0,"replicas":[3,4]},
+ {"topic":"foo1","partition":1,"replicas":[2,3]},
+ {"topic":"foo2","partition":1,"replicas":[2,3]}]
+ }
+
+ Proposed partition reassignment configuration
+
+ {"version":1,
+ "partitions":[{"topic":"foo1","partition":2,"replicas":[5,6]},
+ {"topic":"foo1","partition":0,"replicas":[5,6]},
+ {"topic":"foo2","partition":2,"replicas":[5,6]},
+ {"topic":"foo2","partition":0,"replicas":[5,6]},
+ {"topic":"foo1","partition":1,"replicas":[5,6]},
+ {"topic":"foo2","partition":1,"replicas":[5,6]}]
+ }
+#
+```
 
 这里提出的输出格式正确，我们可以保存两个新的 JSON 文件，我们将它们称为*revert-reassignment.json*和*expand-cluster-reassignment.json*。第一个文件可用于将分区移动回原始位置，如果有必要进行回滚。第二个文件可用于下一步，因为这只是一个提议，尚未执行任何操作。你会注意到输出中领导权的平衡不够好，因为提议将导致所有领导权移动到经纪人 5。我们现在将忽略这一点，并假设集群自动领导权平衡已启用，这将有助于稍后进行分发。值得注意的是，如果你确切地知道要将分区移动到哪里，并且手动编写 JSON 来移动分区，第一步可以跳过。
 
 要执行文件*expand-cluster-reassignment.json*中提出的分区重新分配，运行以下命令：
 
-[PRE26]
+```java
+# kafka-reassign-partitions.sh --bootstrap-server localhost:9092
+--reassignment-json-file expand-cluster-reassignment.json
+--execute
+ Current partition replica assignment
+
+ {"version":1,
+ "partitions":[{"topic":"foo1","partition":2,"replicas":[1,2]},
+ {"topic":"foo1","partition":0,"replicas":[3,4]},
+ {"topic":"foo2","partition":2,"replicas":[1,2]},
+ {"topic":"foo2","partition":0,"replicas":[3,4]},
+ {"topic":"foo1","partition":1,"replicas":[2,3]},
+ {"topic":"foo2","partition":1,"replicas":[2,3]}]
+ }
+
+ Save this to use as the --reassignment-json-file option during rollback
+ Successfully started reassignment of partitions
+ {"version":1,
+ "partitions":[{"topic":"foo1","partition":2,"replicas":[5,6]},
+ {"topic":"foo1","partition":0,"replicas":[5,6]},
+ {"topic":"foo2","partition":2,"replicas":[5,6]},
+ {"topic":"foo2","partition":0,"replicas":[5,6]},
+ {"topic":"foo1","partition":1,"replicas":[5,6]},
+ {"topic":"foo2","partition":1,"replicas":[5,6]}]
+ }
+#
+```
 
 这将开始将指定分区副本重新分配到新的经纪人。输出与生成的提议验证相同。集群控制器通过将新副本添加到每个分区的副本列表来执行此重新分配操作，这将暂时增加这些主题的复制因子。然后，新副本将从当前领导者复制每个分区的所有现有消息。根据磁盘上分区的大小，这可能需要大量时间，因为数据通过网络复制到新副本。复制完成后，控制器通过将旧副本从副本列表中删除来将复制因子减少到原始大小，并删除旧副本。
 
@@ -565,7 +825,20 @@ Kafka 的许多命令行工具对 Kafka 运行的版本有依赖，以正确运�
 
 以下是在运行前面的分区重新分配时使用`--verify`选项时的潜在结果的示例，文件名为*expand-cluster-reassignment.json*：
 
-[PRE27]
+```java
+# kafka-reassign-partitions.sh --bootstrap-server localhost:9092
+--reassignment-json-file expand-cluster-reassignment.json
+--verify
+Status of partition reassignment:
+ Status of partition reassignment:
+ Reassignment of partition [foo1,0] completed successfully
+ Reassignment of partition [foo1,1] is in progress
+ Reassignment of partition [foo1,2] is in progress
+ Reassignment of partition [foo2,0] completed successfully
+ Reassignment of partition [foo2,1] completed successfully
+ Reassignment of partition [foo2,2] completed successfully
+#
+```
 
 ### 更改复制因子
 
@@ -573,11 +846,26 @@ Kafka 的许多命令行工具对 Kafka 运行的版本有依赖，以正确运�
 
 例如，如果我们想要将上一个示例中的主题“foo1”从 RF = 2 增加到 RF = 3，那么我们可以制作一个类似于之前使用的执行提案的 JSON，只是我们会在副本集中添加一个额外的代理 ID。例如，我们可以构造一个名为*increase-foo1-RF.json*的 JSON，在其中我们将代理 4 添加到我们已经拥有的 5,6 的现有集合中：
 
-[PRE28]
+```java
+{
+  {"version":1,
+  "partitions":[{"topic":"foo1","partition":1,"replicas":[5,6,4]},
+                {"topic":"foo1","partition":2,"replicas":[5,6,4]},
+                {"topic":"foo1","partition":3,"replicas":[5,6,4]},
+  }
+}
+```
 
 然后，我们将使用之前显示的命令来执行此提案。当完成时，我们可以使用`--verify`标志或使用`kafka-topics.sh`脚本来描述主题来验证 RF 是否已经增加：
 
-[PRE29]
+```java
+# kafka-topics.sh --bootstrap-server localhost:9092 --topic foo1 --describe
+ Topic:foo1	PartitionCount:3	ReplicationFactor:3	Configs:
+ Topic: foo1	Partition: 0	Leader: 5	Replicas: 5,6,4	Isr: 5,6,4
+ Topic: foo1	Partition: 1	Leader: 5	Replicas: 5,6,4	Isr: 5,6,4
+ Topic: foo1	Partition: 2	Leader: 5	Replicas: 5,6,4	Isr: 5,6,4
+#
+```
 
 ### 取消副本重新分配
 
@@ -589,11 +877,69 @@ Kafka 的许多命令行工具对 Kafka 运行的版本有依赖，以正确运�
 
 在此示例中，我们将从一个名为“my-topic”的示例主题中转储日志，其中只有四条消息。首先，我们将简单地解码名为*00000000000000000000.log*的日志段文件，并检索有关每条消息的基本元数据信息，而不实际打印消息内容。在我们的示例 Kafka 安装中，Kafka 数据目录设置为*/tmp/kafka-logs*。因此，我们用于查找日志段的目录将是*/tmp/kafka-logs/<topic-name>-<partition>*，在这种情况下是*/tmp/kafka-logs/my-topic-0/*：
 
-[PRE30]
+```java
+# kafka-dump-log.sh --files /tmp/kafka-logs/my-topic-0/00000000000000000000.log
+Dumping /tmp/kafka-logs/my-topic-0/00000000000000000000.log
+Starting offset: 0
+baseOffset: 0 lastOffset: 0 count: 1 baseSequence: -1 lastSequence: -1
+ producerId: -1 producerEpoch: -1 partitionLeaderEpoch: 0
+ isTransactional: false isControl: false position: 0
+ CreateTime: 1623034799990 size: 77 magic: 2
+ compresscodec: NONE crc: 1773642166 isvalid: true
+baseOffset: 1 lastOffset: 1 count: 1 baseSequence: -1 lastSequence: -1
+ producerId: -1 producerEpoch: -1 partitionLeaderEpoch: 0
+ isTransactional: false isControl: false position: 77
+ CreateTime: 1623034803631 size: 82 magic: 2
+ compresscodec: NONE crc: 1638234280 isvalid: true
+baseOffset: 2 lastOffset: 2 count: 1 baseSequence: -1 lastSequence: -1
+ producerId: -1 producerEpoch: -1 partitionLeaderEpoch: 0
+ isTransactional: false isControl: false position: 159
+ CreateTime: 1623034808233 size: 82 magic: 2
+ compresscodec: NONE crc: 4143814684 isvalid: true
+baseOffset: 3 lastOffset: 3 count: 1 baseSequence: -1 lastSequence: -1
+ producerId: -1 producerEpoch: -1 partitionLeaderEpoch: 0
+ isTransactional: false isControl: false position: 241
+ CreateTime: 1623034811837 size: 77 magic: 2
+ compresscodec: NONE crc: 3096928182 isvalid: true
+#
+```
 
 在下一个示例中，我们添加了`--print-data-log`选项，这将为我们提供实际的有效载荷信息和更多内容：
 
-[PRE31]
+```java
+# kafka-dump-log.sh --files /tmp/kafka-logs/my-topic-0/00000000000000000000.log --print-data-log
+Dumping /tmp/kafka-logs/my-topic-0/00000000000000000000.log
+Starting offset: 0
+baseOffset: 0 lastOffset: 0 count: 1 baseSequence: -1 lastSequence: -1
+ producerId: -1 producerEpoch: -1 partitionLeaderEpoch: 0
+ isTransactional: false  isControl: false position: 0
+ CreateTime: 1623034799990 size: 77 magic: 2
+ compresscodec: NONE crc: 1773642166 isvalid: true
+| offset: 0 CreateTime: 1623034799990 keysize: -1 valuesize: 9
+ sequence: -1 headerKeys: [] payload: Message 1
+baseOffset: 1 lastOffset: 1 count: 1 baseSequence: -1 lastSequence: -1
+ producerId: -1 producerEpoch: -1 partitionLeaderEpoch: 0
+ isTransactional: false isControl: false position: 77
+ CreateTime: 1623034803631 size: 82 magic: 2
+ compresscodec: NONE crc: 1638234280 isvalid: true
+| offset: 1 CreateTime: 1623034803631 keysize: -1 valuesize: 14
+ sequence: -1 headerKeys: [] payload: Test Message 2
+baseOffset: 2 lastOffset: 2 count: 1 baseSequence: -1 lastSequence: -1
+ producerId: -1 producerEpoch: -1 partitionLeaderEpoch: 0
+ isTransactional: false isControl: false position: 159
+ CreateTime: 1623034808233 size: 82 magic: 2
+ compresscodec: NONE crc: 4143814684 isvalid: true
+| offset: 2 CreateTime: 1623034808233 keysize: -1 valuesize: 14
+ sequence: -1 headerKeys: [] payload: Test Message 3
+baseOffset: 3 lastOffset: 3 count: 1 baseSequence: -1 lastSequence: -1
+ producerId: -1 producerEpoch: -1 partitionLeaderEpoch: 0
+ isTransactional: false isControl: false position: 241
+ CreateTime: 1623034811837 size: 77 magic: 2
+ compresscodec: NONE crc: 3096928182 isvalid: true
+| offset: 3 CreateTime: 1623034811837 keysize: -1 valuesize: 9
+ sequence: -1 headerKeys: [] payload: Message 4
+#
+```
 
 该工具还包含一些其他有用的选项，例如验证与日志段一起使用的索引文件。索引用于在日志段中查找消息，如果损坏，将导致消费中的错误。验证是在代理以不洁净状态启动时执行的（即，它没有正常停止），但也可以手动执行。有两个选项用于检查索引，取决于您想要进行多少检查。选项“--index-sanity-check”将仅检查索引是否处于可用状态，而“--verify-index-only”将检查索引中的不匹配项，而不打印出所有索引条目。另一个有用的选项“--value-decoder-class”允许通过传递解码器对序列化消息进行反序列化。
 
@@ -609,7 +955,16 @@ Kafka 的许多命令行工具对 Kafka 运行的版本有依赖，以正确运�
 
 例如，在 kafka 代理 1 和 2 上验证以*my*开头的主题的副本，其中包含“my-topic”的分区 0：
 
-[PRE32]
+```java
+# kafka-replica-verification.sh --broker-list kafka.host1.domain.com:9092,kafka.host2.domain.com:9092
+--topic-white-list 'my.*'
+
+2021-06-07 03:28:21,829: verification process is started.
+2021-06-07 03:28:51,949: max lag is 0 for partition my-topic-0 at offset 4 among 1 partitions
+2021-06-07 03:29:22,039: max lag is 0 for partition my-topic-0 at offset 4 among 1 partitions
+...
+#
+```
 
 # 其他工具
 

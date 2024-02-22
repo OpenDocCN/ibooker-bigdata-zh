@@ -126,7 +126,9 @@ Kafka Connect 随 Apache Kafka 一起提供，因此无需单独安装。对于�
 
 启动 Connect worker 与启动代理非常相似-您使用属性文件调用启动脚本：
 
-[PRE0]
+```java
+ bin/connect-distributed.sh config/connect-distributed.properties
+```
 
 Connect worker 的一些关键配置：
 
@@ -158,11 +160,44 @@ Connect 可以处理存储在 Kafka 中的多种数据格式。这两个配置�
 
 一旦工作人员上岗并且您有一个集群，请通过检查 REST API 确保其正常运行：
 
-[PRE1]
+```java
+$ curl http://localhost:8083/
+{"version":"3.0.0-SNAPSHOT","commit":"fae0784ce32a448a","kafka_cluster_id":"pfkYIGZQSXm8RylvACQHdg"}%
+```
 
 访问基本 REST URI 应返回您正在运行的当前版本。我们正在运行 Kafka 3.0.0 的快照（预发布）。我们还可以检查可用的连接器插件：
 
-[PRE2]
+```java
+$ curl http://localhost:8083/connector-plugins
+
+[
+  {
+    "class": "org.apache.kafka.connect.file.FileStreamSinkConnector",
+    "type": "sink",
+    "version": "3.0.0-SNAPSHOT"
+  },
+  {
+    "class": "org.apache.kafka.connect.file.FileStreamSourceConnector",
+    "type": "source",
+    "version": "3.0.0-SNAPSHOT"
+  },
+  {
+    "class": "org.apache.kafka.connect.mirror.MirrorCheckpointConnector",
+    "type": "source",
+    "version": "1"
+  },
+  {
+    "class": "org.apache.kafka.connect.mirror.MirrorHeartbeatConnector",
+    "type": "source",
+    "version": "1"
+  },
+  {
+    "class": "org.apache.kafka.connect.mirror.MirrorSourceConnector",
+    "type": "source",
+    "version": "1"
+  }
+]
+```
 
 我们正在运行纯粹的 Apache Kafka，因此唯一可用的连接器插件是文件源、文件接收器，以及 MirrorMaker 2.0 的一部分连接器。
 
@@ -178,27 +213,70 @@ Connect 可以处理存储在 Kafka 中的多种数据格式。这两个配置�
 
 首先，让我们运行一个分布式的 Connect 工作节点。在真实的生产环境中，您至少需要运行两到三个这样的节点，以提供高可用性。在这个例子中，我们只会启动一个：
 
-[PRE3]
+```java
+bin/connect-distributed.sh config/connect-distributed.properties &
+```
 
 现在是时候启动一个文件源了。举个例子，我们将配置它来读取 Kafka 配置文件——基本上是将 Kafka 的配置导入到一个 Kafka 主题中：
 
-[PRE4]
+```java
+echo '{"name":"load-kafka-config", "config":{"connector.class":
+"FileStreamSource","file":"config/server.properties","topic":
+"kafka-config-topic"}}' | curl -X POST -d @- http://localhost:8083/connectors
+-H "Content-Type: application/json"
+
+{
+  "name": "load-kafka-config",
+  "config": {
+    "connector.class": "FileStreamSource",
+    "file": "config/server.properties",
+    "topic": "kafka-config-topic",
+    "name": "load-kafka-config"
+  },
+  "tasks": [
+    {
+      "connector": "load-kafka-config",
+      "task": 0
+    }
+  ],
+  "type": "source"
+}
+```
 
 要创建一个连接器，我们编写了一个 JSON，其中包括一个连接器名称`load-kafka-config`，以及一个连接器配置映射，其中包括连接器类、我们要加载的文件和我们要将文件加载到的主题。
 
 让我们使用 Kafka 控制台消费者来检查我们是否已经将配置加载到一个主题中：
 
-[PRE5]
+```java
+gwen$ bin/kafka-console-consumer.sh --bootstrap-server=localhost:9092
+--topic kafka-config-topic --from-beginning
+```
 
 如果一切顺利，你应该会看到类似以下的内容：
 
-[PRE6]
+```java
+{"schema":{"type":"string","optional":false},"payload":"# Licensed to the Apache Software Foundation (ASF) under one or more"}
+
+<more stuff here>
+
+{"schema":{"type":"string","optional":false},"payload":"############################# Server Basics #############################"}
+{"schema":{"type":"string","optional":false},"payload":""}
+{"schema":{"type":"string","optional":false},"payload":"# The id of the broker. This must be set to a unique integer for each broker."}
+{"schema":{"type":"string","optional":false},"payload":"broker.id=0"}
+{"schema":{"type":"string","optional":false},"payload":""}
+
+<more stuff here>
+```
 
 这实际上是*config/server.properties*文件的内容，因为它被逐行转换为 JSON 并放置在`kafka-config-topic`中。请注意，默认情况下，JSON 转换器在每条记录中放置一个模式。在这种特定情况下，模式非常简单——只有一个名为`payload`的列，类型为`string`，每条记录中包含一个文件的单行。
 
 现在让我们使用文件接收器转换器将该主题的内容转储到一个文件中。生成的文件应该与原始的*server.properties*文件完全相同，因为 JSON 转换器将 JSON 记录转换回简单的文本行：
 
-[PRE7]
+```java
+echo '{"name":"dump-kafka-config", "config":{"connector.class":"FileStreamSink","file":"copy-of-server-properties","topics":"kafka-config-topic"}}' | curl -X POST -d @- http://localhost:8083/connectors --header "content-Type:application/json"
+
+{"name":"dump-kafka-config","config":{"connector.class":"FileStreamSink","file":"copy-of-server-properties","topics":"kafka-config-topic","name":"dump-kafka-config"},"tasks":[]}
+```
 
 注意源配置的变化：我们现在使用的类是`FileStreamSink`而不是`FileStreamSource`。我们仍然有一个文件属性，但现在它指的是目标文件而不是记录的源，而且不再指定*topic*，而是指定*topics*。注意复数形式——你可以用 sink 将多个主题写入一个文件，而源只允许写入一个主题。
 
@@ -206,7 +284,9 @@ Connect 可以处理存储在 Kafka 中的多种数据格式。这两个配置�
 
 要删除一个连接器，您可以运行：
 
-[PRE8]
+```java
+curl -X DELETE http://localhost:8083/connectors/dump-kafka-config
+```
 
 ###### 警告
 
@@ -218,7 +298,10 @@ Connect 可以处理存储在 Kafka 中的多种数据格式。这两个配置�
 
 我们正在 MacBook 上运行测试。要安装 MySQL 和 Elasticsearch，只需运行：
 
-[PRE9]
+```java
+brew install mysql
+brew install elasticsearch
+```
 
 下一步是确保您有这些连接器。有几个选项：
 
@@ -230,7 +313,9 @@ Connect 可以处理存储在 Kafka 中的多种数据格式。这两个配置�
 
 1.  克隆连接器源代码：
 
-[PRE10]
+```java
+        git clone https://github.com/confluentinc/kafka-connect-elasticsearch
+        ```
 
 1.  运行“mvn install -DskipTests”来构建项目。
 
@@ -240,39 +325,127 @@ Connect 可以处理存储在 Kafka 中的多种数据格式。这两个配置�
 
 然后将在构建每个连接器的“target”目录下创建的 jar 文件及其依赖项复制到“plugin.path”的适当子目录中：
 
-[PRE11]
+```java
+gwen$ mkdir /opt/connectors/jdbc
+gwen$ mkdir /opt/connectors/elastic
+gwen$ cp .../kafka-connect-jdbc/target/kafka-connect-jdbc-10.3.x-SNAPSHOT.jar /opt/connectors/jdbc
+gwen$ cp ../kafka-connect-elasticsearch/target/kafka-connect-elasticsearch-11.1.0-SNAPSHOT.jar /opt/connectors/elastic
+gwen$ cp ../kafka-connect-elasticsearch/target/kafka-connect-elasticsearch-11.1.0-SNAPSHOT-package/share/java/kafka-connect-elasticsearch/* /opt/connectors/elastic
+```
 
 此外，由于我们不仅需要连接到任何数据库，而是特别需要连接到 MySQL，因此您需要下载并安装 MySQL JDBC 驱动程序。出于许可证原因，驱动程序不随连接器一起提供。您可以从[MySQL 网站](https://oreil.ly/KZCPw)下载驱动程序，然后将 jar 文件放在*/opt/connectors/jdbc*中。
 
 重新启动 Kafka Connect 工作程序，并检查新的连接器插件是否已列出：
 
-[PRE12]
+```java
+gwen$  bin/connect-distributed.sh config/connect-distributed.properties &
+
+gwen$  curl http://localhost:8083/connector-plugins
+[
+  {
+    "class": "io.confluent.connect.elasticsearch.ElasticsearchSinkConnector",
+    "type": "sink",
+    "version": "11.1.0-SNAPSHOT"
+  },
+  {
+    "class": "io.confluent.connect.jdbc.JdbcSinkConnector",
+    "type": "sink",
+    "version": "10.3.x-SNAPSHOT"
+  },
+  {
+    "class": "io.confluent.connect.jdbc.JdbcSourceConnector",
+    "type": "source",
+    "version": "10.3.x-SNAPSHOT"
+  }
+```
 
 我们可以看到我们现在在我们的“Connect”集群中有更多的连接器插件可用。
 
 下一步是在 MySQL 中创建一个表，我们可以使用我们的 JDBC 连接器将其流式传输到 Kafka 中：
 
-[PRE13]
+```java
+gwen$ mysql.server restart
+gwen$  mysql --user=root
+
+mysql> create database test;
+Query OK, 1 row affected (0.00 sec)
+
+mysql> use test;
+Database changed
+mysql> create table login (username varchar(30), login_time datetime);
+Query OK, 0 rows affected (0.02 sec)
+
+mysql> insert into login values ('gwenshap', now());
+Query OK, 1 row affected (0.01 sec)
+
+mysql> insert into login values ('tpalino', now());
+Query OK, 1 row affected (0.00 sec)
+```
 
 正如您所看到的，我们创建了一个数据库和一个表，并插入了一些行作为示例。
 
 下一步是配置我们的 JDBC 源连接器。我们可以通过查看文档找出可用的配置选项，但我们也可以使用 REST API 来查找可用的配置选项：
 
-[PRE14]
+```java
+gwen$ curl -X PUT -d '{"connector.class":"JdbcSource"}' localhost:8083/connector-plugins/JdbcSourceConnector/config/validate/ --header "content-Type:application/json"
+
+{
+    "configs": [
+        {
+            "definition": {
+                "default_value": "",
+                "dependents": [],
+                "display_name": "Timestamp Column Name",
+                "documentation": "The name of the timestamp column to use
+                to detect new or modified rows. This column may not be
+                nullable.",
+                "group": "Mode",
+                "importance": "MEDIUM",
+                "name": "timestamp.column.name",
+                "order": 3,
+                "required": false,
+                "type": "STRING",
+                "width": "MEDIUM"
+            },
+            <more stuff>
+```
 
 我们要求 REST API 验证连接器的配置，并向其发送了一个仅包含类名的配置（这是必需的最低配置）。作为响应，我们得到了所有可用配置的 JSON 定义。
 
 有了这些信息，现在是时候创建和配置我们的 JDBC 连接器了：
 
-[PRE15]
+```java
+echo '{"name":"mysql-login-connector", "config":{"connector.class":"JdbcSourceConnector","connection.url":"jdbc:mysql://127.0.0.1:3306/test?user=root","mode":"timestamp","table.whitelist":"login","validate.non.null":false,"timestamp.column.name":"login_time","topic.prefix":"mysql."}}' | curl -X POST -d @- http://localhost:8083/connectors --header "content-Type:application/json"
+
+{
+  "name": "mysql-login-connector",
+  "config": {
+    "connector.class": "JdbcSourceConnector",
+    "connection.url": "jdbc:mysql://127.0.0.1:3306/test?user=root",
+    "mode": "timestamp",
+    "table.whitelist": "login",
+    "validate.non.null": "false",
+    "timestamp.column.name": "login_time",
+    "topic.prefix": "mysql.",
+    "name": "mysql-login-connector"
+  },
+  "tasks": []
+}
+```
 
 让我们通过从“mysql.login”主题中读取数据来确保它起作用：
 
-[PRE16]
+```java
+gwen$ bin/kafka-console-consumer.sh --bootstrap-server=localhost:9092 --topic mysql.login --from-beginning
+```
 
 如果您收到错误消息说主题不存在或看不到数据，请检查 Connect worker 日志以查找错误，例如：
 
-[PRE17]
+```java
+[2016-10-16 19:39:40,482] ERROR Error while starting connector mysql-login-connector (org.apache.kafka.connect.runtime.WorkerConnector:108)
+org.apache.kafka.connect.errors.ConnectException: java.sql.SQLException: Access denied for user 'root;'@'localhost' (using password: NO)
+       	at io.confluent.connect.jdbc.JdbcSourceConnector.start(JdbcSourceConnector.java:78)
+```
 
 其他问题可能涉及类路径中驱动程序的存在或读取表的权限。
 
@@ -286,21 +459,105 @@ Connect 可以处理存储在 Kafka 中的多种数据格式。这两个配置�
 
 首先，我们启动 Elasticsearch 并通过访问其本地端口来验证它是否正常运行：
 
-[PRE18]
+```java
+gwen$ elasticsearch &
+gwen$ curl http://localhost:9200/
+{
+  "name" : "Chens-MBP",
+  "cluster_name" : "elasticsearch_gwenshap",
+  "cluster_uuid" : "X69zu3_sQNGb7zbMh7NDVw",
+  "version" : {
+    "number" : "7.5.2",
+    "build_flavor" : "default",
+    "build_type" : "tar",
+    "build_hash" : "8bec50e1e0ad29dad5653712cf3bb580cd1afcdf",
+    "build_date" : "2020-01-15T12:11:52.313576Z",
+    "build_snapshot" : false,
+    "lucene_version" : "8.3.0",
+    "minimum_wire_compatibility_version" : "6.8.0",
+    "minimum_index_compatibility_version" : "6.0.0-beta1"
+  },
+  "tagline" : "You Know, for Search"
+}
+```
 
 现在创建并启动连接器：
 
-[PRE19]
+```java
+echo '{"name":"elastic-login-connector", "config":{"connector.class":"ElasticsearchSinkConnector","connection.url":"http://localhost:9200","type.name":"mysql-data","topics":"mysql.login","key.ignore":true}}' | curl -X POST -d @- http://localhost:8083/connectors --header "content-Type:application/json"
+
+{
+  "name": "elastic-login-connector",
+  "config": {
+    "connector.class": "ElasticsearchSinkConnector",
+    "connection.url": "http://localhost:9200",
+    "topics": "mysql.login",
+    "key.ignore": "true",
+    "name": "elastic-login-connector"
+  },
+  "tasks": [
+    {
+      "connector": "elastic-login-connector",
+      "task": 0
+    }
+  ]
+}
+```
 
 这里有一些我们需要解释的配置。`connection.url`只是我们之前配置的本地 Elasticsearch 服务器的 URL。Kafka 中的每个主题默认情况下将成为一个单独的 Elasticsearch 索引，与主题名称相同。我们写入 Elasticsearch 的唯一主题是`mysql.login`。JDBC 连接器不会填充消息键。因此，Kafka 中的事件具有空键。因为 Kafka 中的事件缺少键，我们需要告诉 Elasticsearch 连接器使用主题名称、分区 ID 和偏移量作为每个事件的键。这是通过将`key.ignore`配置设置为`true`来完成的。
 
 让我们检查一下是否已创建了具有`mysql.login`数据的索引：
 
-[PRE20]
+```java
+gwen$ curl 'localhost:9200/_cat/indices?v'
+health status index       uuid                   pri rep docs.count docs.deleted store.size pri.store.size
+yellow open   mysql.login wkeyk9-bQea6NJmAFjv4hw   1   1          2            0      3.9kb          3.9kb
+```
 
 如果索引不存在，请查看 Connect worker 日志中的错误。缺少配置或库是错误的常见原因。如果一切正常，我们可以搜索索引以查找我们的记录：
 
-[PRE21]
+```java
+gwen$ curl -s -X "GET" "http://localhost:9200/mysql.login/_search?pretty=true"
+{
+  "took" : 40,
+  "timed_out" : false,
+  "_shards" : {
+    "total" : 1,
+    "successful" : 1,
+    "skipped" : 0,
+    "failed" : 0
+  },
+  "hits" : {
+    "total" : {
+      "value" : 2,
+      "relation" : "eq"
+    },
+    "max_score" : 1.0,
+    "hits" : [
+      {
+        "_index" : "mysql.login",
+        "_type" : "_doc",
+        "_id" : "mysql.login+0+0",
+        "_score" : 1.0,
+        "_source" : {
+          "username" : "gwenshap",
+          "login_time" : 1621699811000
+        }
+      },
+      {
+        "_index" : "mysql.login",
+        "_type" : "_doc",
+        "_id" : "mysql.login+0+1",
+        "_score" : 1.0,
+        "_source" : {
+          "username" : "tpalino",
+          "login_time" : 1621699816000
+        }
+      }
+    ]
+  }
+}
+```
 
 如果您在 MySQL 表中添加新记录，它们将自动出现在 Kafka 的`mysql.login`主题中，并出现在相应的 Elasticsearch 索引中。
 
@@ -368,11 +625,36 @@ HeaderFrom
 
 为此，我们将用以下内容替换以前的 MySQL 连接器配置：
 
-[PRE22]
+```java
+echo '{
+  "name": "mysql-login-connector",
+  "config": {
+    "connector.class": "JdbcSourceConnector",
+    "connection.url": "jdbc:mysql://127.0.0.1:3306/test?user=root",
+    "mode": "timestamp",
+    "table.whitelist": "login",
+    "validate.non.null": "false",
+    "timestamp.column.name": "login_time",
+    "topic.prefix": "mysql.",
+    "name": "mysql-login-connector",
+    "transforms": "InsertHeader",
+    "transforms.InsertHeader.type":
+      "org.apache.kafka.connect.transforms.InsertHeader",
+    "transforms.InsertHeader.header": "MessageSource",
+    "transforms.InsertHeader.value.literal": "mysql-login-connector"
+  }}' | curl -X POST -d @- http://localhost:8083/connectors --header "content-Type:application/json"
+```
 
 现在，如果您向我们在上一个示例中创建的 MySQL 表中插入几条记录，您将能够看到`mysql.login`主题中的新消息具有标头（请注意，您需要 Apache Kafka 2.7 或更高版本才能在控制台消费者中打印标头）：
 
-[PRE23]
+```java
+bin/kafka-console-consumer.sh --bootstrap-server=localhost:9092 --topic mysql.login --from-beginning --property print.headers=true
+
+NO_HEADERS	{"schema":{"type":"struct","fields":[{"type":"string","optional":true,"field":"username"},{"type":"int64","optional":true,"name":"org.apache.kafka.connect.data.Timestamp","version":1,"field":"login_time"}],"optional":false,"name":"login"},"payload":{"username":"tpalino","login_time":1621699816000}}
+MessageSource:mysql-login-connector	{"schema":{"type":"struct","fields":
+
+[{"type":"string","optional":true,"field":"username"},{"type":"int64","optional":true,"name":"org.apache.kafka.connect.data.Timestamp","version":1,"field":"login_time"}],"optional":false,"name":"login"},"payload":{"username":"rajini","login_time":1621803287000}}
+```
 
 如您所见，旧记录显示“NO_HEADERS”，而新记录显示“MessageSource:mysql-login-connector”。
 

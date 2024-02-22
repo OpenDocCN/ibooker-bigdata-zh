@@ -40,7 +40,13 @@ Apache Kafka 协议支持的所有管理操作都直接在`KafkaAdminClient`中�
 
 要使用 Kafka 的 AdminClient，您首先必须构建 AdminClient 类的实例。这非常简单：
 
-[PRE0]
+```java
+Properties props = new Properties();
+props.put(AdminClientConfig.BOOTSTRAP_SERVERS_CONFIG, "localhost:9092");
+AdminClient admin = AdminClient.create(props);
+// TODO: Do something useful with AdminClient
+admin.close(Duration.ofSeconds(30));
+```
 
 静态的`create`方法接受一个配置了`Properties`对象的参数。唯一必需的配置是集群的 URI：一个逗号分隔的要连接的代理列表。通常在生产环境中，您希望至少指定三个代理，以防其中一个当前不可用。我们将在第十一章中讨论如何单独配置安全和经过身份验证的连接。
 
@@ -76,13 +82,48 @@ Apache Kafka 协议支持的所有管理操作都直接在`KafkaAdminClient`中�
 
 让我们首先列出集群中的所有主题：
 
-[PRE1]
+```java
+ListTopicsResult topics = admin.listTopics();
+topics.names().get().forEach(System.out::println);
+```
 
 请注意，`admin.listTopics()`返回`ListTopicsResult`对象，它是对`Futures`集合的薄包装。还要注意，`topics.name()`返回`name`的`Future`集。当我们在这个`Future`上调用`get()`时，执行线程将等待服务器响应一组主题名称，或者我们收到超时异常。一旦我们得到列表，我们遍历它以打印所有主题名称。
 
 现在让我们尝试一些更有雄心的事情：检查主题是否存在，如果不存在则创建。检查特定主题是否存在的一种方法是获取所有主题的列表，并检查您需要的主题是否在列表中。在大型集群上，这可能效率低下。此外，有时您希望检查的不仅仅是主题是否存在 - 您希望确保主题具有正确数量的分区和副本。例如，Kafka Connect 和 Confluent Schema Registry 使用 Kafka 主题存储配置。当它们启动时，它们会检查配置主题是否存在，它只有一个分区以确保配置更改按严格顺序到达，它有三个副本以确保可用性，并且主题是压缩的，因此旧配置将被无限期保留：
 
-[PRE2]
+```java
+DescribeTopicsResult demoTopic = admin.describeTopics(TOPIC_LIST); ①
+
+try {
+    topicDescription = demoTopic.values().get(TOPIC_NAME).get(); ②
+    System.out.println("Description of demo topic:" + topicDescription);
+
+    if (topicDescription.partitions().size() != NUM_PARTITIONS) { ③
+      System.out.println("Topic has wrong number of partitions. Exiting.");
+      System.exit(-1);
+    }
+} catch (ExecutionException e) { ④
+    // exit early for almost all exceptions
+    if (! (e.getCause() instanceof UnknownTopicOrPartitionException)) {
+        e.printStackTrace();
+        throw e;
+    }
+
+    // if we are here, topic doesn't exist
+    System.out.println("Topic " + TOPIC_NAME +
+        " does not exist. Going to create it now");
+    // Note that number of partitions and replicas is optional. If they are
+    // not specified, the defaults configured on the Kafka brokers will be used
+    CreateTopicsResult newTopic = admin.createTopics(Collections.singletonList(
+            new NewTopic(TOPIC_NAME, NUM_PARTITIONS, REP_FACTOR))); ⑤
+
+    // Check that the topic was created correctly:
+    if (newTopic.numPartitions(TOPIC_NAME).get() != NUM_PARTITIONS) { ![6](img/6.png)
+        System.out.println("Topic has wrong number of partitions.");
+        System.exit(-1);
+    }
+}
+```
 
 ①
 
@@ -110,7 +151,18 @@ Apache Kafka 协议支持的所有管理操作都直接在`KafkaAdminClient`中�
 
 现在我们有了一个主题，让我们删除它：
 
-[PRE3]
+```java
+admin.deleteTopics(TOPIC_LIST).all().get();
+
+// Check that it is gone. Note that due to the async nature of deletes,
+// it is possible that at this point the topic still exists
+try {
+    topicDescription = demoTopic.values().get(TOPIC_NAME).get();
+    System.out.println("Topic " + TOPIC_NAME + " is still around");
+} catch (ExecutionException e) {
+    System.out.println("Topic " + TOPIC_NAME + " is gone");
+}
+```
 
 此时代码应该相当熟悉。我们使用`deleteTopics`方法删除一个主题名称列表，并使用`get()`等待完成。
 
@@ -120,7 +172,31 @@ Apache Kafka 协议支持的所有管理操作都直接在`KafkaAdminClient`中�
 
 到目前为止，所有示例都使用了不同`AdminClient`方法返回的`Future`上的阻塞`get()`调用。大多数情况下，这就是您所需要的——管理操作很少，等待操作成功或超时通常是可以接受的。有一个例外：如果您要写入一个预期处理大量管理请求的服务器。在这种情况下，您不希望在等待 Kafka 响应时阻塞服务器线程。您希望继续接受用户的请求并将其发送到 Kafka，当 Kafka 响应时，将响应发送给客户端。在这些情况下，`KafkaFuture`的多功能性就变得非常有用。这是一个简单的例子。
 
-[PRE4]
+```java
+vertx.createHttpServer().requestHandler(request -> { ①
+    String topic = request.getParam("topic"); ②
+    String timeout = request.getParam("timeout");
+    int timeoutMs = NumberUtils.toInt(timeout, 1000);
+
+    DescribeTopicsResult demoTopic = admin.describeTopics( ③
+            Collections.singletonList(topic),
+            new DescribeTopicsOptions().timeoutMs(timeoutMs));
+
+    demoTopic.values().get(topic).whenComplete( ④
+            new KafkaFuture.BiConsumer<TopicDescription, Throwable>() {
+                @Override
+                public void accept(final TopicDescription topicDescription,
+                                   final Throwable throwable) {
+                    if (throwable != null) {
+                      request.response().end("Error trying to describe topic "
+                              + topic + " due to " + throwable.getMessage()); ⑤
+                    } else {
+                        request.response().end(topicDescription.toString()); ![6](img/6.png)
+                    }
+                }
+            });
+}).listen(8080);
+```
 
 ①
 
@@ -156,7 +232,31 @@ Apache Kafka 协议支持的所有管理操作都直接在`KafkaAdminClient`中�
 
 以下是一个示例：
 
-[PRE5]
+```java
+ConfigResource configResource =
+        new ConfigResource(ConfigResource.Type.TOPIC, TOPIC_NAME); ①
+DescribeConfigsResult configsResult =
+        admin.describeConfigs(Collections.singleton(configResource));
+Config configs = configsResult.all().get().get(configResource);
+
+// print nondefault configs
+configs.entries().stream().filter(
+        entry -> !entry.isDefault()).forEach(System.out::println); ②
+
+// Check if topic is compacted
+ConfigEntry compaction = new ConfigEntry(TopicConfig.CLEANUP_POLICY_CONFIG,
+        TopicConfig.CLEANUP_POLICY_COMPACT);
+if (!configs.entries().contains(compaction)) {
+    // if topic is not compacted, compact it
+    Collection<AlterConfigOp> configOp = new ArrayList<AlterConfigOp>();
+    configOp.add(new AlterConfigOp(compaction, AlterConfigOp.OpType.SET)); ③
+    Map<ConfigResource, Collection<AlterConfigOp>> alterConf = new HashMap<>();
+    alterConf.put(configResource, configOp);
+    admin.incrementalAlterConfigs(alterConf).all().get();
+} else {
+    System.out.println("Topic " + TOPIC_NAME + " is compacted topic");
+}
+```
 
 ①
 
@@ -184,19 +284,54 @@ Apache Kafka 协议支持的所有管理操作都直接在`KafkaAdminClient`中�
 
 如果你想要探索和修改消费者组，第一步是列出它们：
 
-[PRE6]
+```java
+admin.listConsumerGroups().valid().get().forEach(System.out::println);
+```
 
 通过使用`valid()`方法，`get()`将返回的集合只包含集群返回的没有错误的消费者组，如果有的话。任何错误将被完全忽略，而不是作为异常抛出。`errors()`方法可用于获取所有异常。如果像我们在其他示例中所做的那样使用`all()`，集群返回的第一个错误将作为异常抛出。这种错误的可能原因是授权，即你没有权限查看该组，或者某些消费者组的协调者不可用。
 
 如果我们想要更多关于某些组的信息，我们可以描述它们：
 
-[PRE7]
+```java
+ConsumerGroupDescription groupDescription = admin
+        .describeConsumerGroups(CONSUMER_GRP_LIST)
+        .describedGroups().get(CONSUMER_GROUP).get();
+        System.out.println("Description of group " + CONSUMER_GROUP
+                + ":" + groupDescription);
+```
 
 描述包含了关于该组的大量信息。这包括了组成员、它们的标识符和主机、分配给它们的分区、用于分配的算法，以及组协调者的主机。在故障排除消费者组时，这个描述非常有用。关于消费者组最重要的信息之一在这个描述中缺失了——不可避免地，我们会想知道该组对于它正在消费的每个分区最后提交的偏移量是多少，以及它落后于日志中最新消息的数量。
 
 过去，获取这些信息的唯一方法是解析消费者组写入内部 Kafka 主题的提交消息。虽然这种方法达到了其目的，但 Kafka 不保证内部消息格式的兼容性，因此不推荐使用旧方法。我们将看看 Kafka 的 AdminClient 如何允许我们检索这些信息：
 
-[PRE8]
+```java
+Map<TopicPartition, OffsetAndMetadata> offsets =
+        admin.listConsumerGroupOffsets(CONSUMER_GROUP)
+                .partitionsToOffsetAndMetadata().get(); ①
+
+Map<TopicPartition, OffsetSpec> requestLatestOffsets = new HashMap<>();
+
+for(TopicPartition tp: offsets.keySet()) {
+    requestLatestOffsets.put(tp, OffsetSpec.latest()); ②
+}
+
+Map<TopicPartition, ListOffsetsResult.ListOffsetsResultInfo> latestOffsets =
+        admin.listOffsets(requestLatestOffsets).all().get();
+
+for (Map.Entry<TopicPartition, OffsetAndMetadata> e: offsets.entrySet()) { ③
+    String topic = e.getKey().topic();
+    int partition =  e.getKey().partition();
+    long committedOffset = e.getValue().offset();
+    long latestOffset = latestOffsets.get(e.getKey()).offset();
+
+    System.out.println("Consumer group " + CONSUMER_GROUP
+            + " has committed offset " + committedOffset
+            + " to topic " + topic + " partition " + partition
+            + ". The latest offset in the partition is "
+            +  latestOffset + " so consumer group is "
+            + (latestOffset - committedOffset) + " records behind");
+}
+```
 
 ①
 
@@ -222,7 +357,25 @@ Apache Kafka 协议支持的所有管理操作都直接在`KafkaAdminClient`中�
 
 在脑海中牢记所有这些警告，让我们来看一个例子：
 
-[PRE9]
+```java
+Map<TopicPartition, ListOffsetsResult.ListOffsetsResultInfo> earliestOffsets =
+    admin.listOffsets(requestEarliestOffsets).all().get(); ①
+
+Map<TopicPartition, OffsetAndMetadata> resetOffsets = new HashMap<>();
+for (Map.Entry<TopicPartition, ListOffsetsResult.ListOffsetsResultInfo> e:
+        earliestOffsets.entrySet()) {
+  resetOffsets.put(e.getKey(), new OffsetAndMetadata(e.getValue().offset())); ②
+}
+
+try {
+  admin.alterConsumerGroupOffsets(CONSUMER_GROUP, resetOffsets).all().get(); ③
+} catch (ExecutionException e) {
+  System.out.println("Failed to update the offsets committed by group "
+            + CONSUMER_GROUP + " with error " + e.getMessage());
+  if (e.getCause() instanceof UnknownMemberIdException)
+      System.out.println("Check if consumer group is still active."); ④
+}
+```
 
 ①
 
@@ -246,7 +399,14 @@ Apache Kafka 协议支持的所有管理操作都直接在`KafkaAdminClient`中�
 
 但是，以防您好奇，这段小片段将满足您的好奇心：
 
-[PRE10]
+```java
+DescribeClusterResult cluster = admin.describeCluster();
+
+System.out.println("Connected to cluster " + cluster.clusterId().get()); ①
+System.out.println("The brokers in the cluster are:");
+cluster.nodes().get().forEach(node -> System.out.println("    * " + node));
+System.out.println("The controller is: " + cluster.controller().get());
+```
 
 ①
 
@@ -264,7 +424,11 @@ Apache Kafka 协议支持的所有管理操作都直接在`KafkaAdminClient`中�
 
 您可以使用`createPartitions`方法向一组主题添加分区。请注意，如果尝试一次扩展多个主题，则可能会成功扩展其中一些主题，而其他主题将失败。
 
-[PRE11]
+```java
+Map<String, NewPartitions> newPartitions = new HashMap<>();
+newPartitions.put(TOPIC_NAME, NewPartitions.increaseTo(NUM_PARTITIONS+2)); ①
+admin.createPartitions(newPartitions).all().get();
+```
 
 ①
 
@@ -280,7 +444,16 @@ Apache Kafka 协议支持的所有管理操作都直接在`KafkaAdminClient`中�
 
 `deleteRecords`方法将标记所有偏移量早于调用该方法时指定的偏移量的记录为已删除，并使它们对 Kafka 消费者不可访问。该方法返回最高的已删除偏移量，因此我们可以检查删除是否确实按预期发生。磁盘上的完全清理将异步进行。请记住，`listOffsets`方法可用于获取在特定时间之后或立即之后编写的记录的偏移量。这些方法可以一起用于删除早于任何特定时间点的记录：
 
-[PRE12]
+```java
+Map<TopicPartition, ListOffsetsResult.ListOffsetsResultInfo> olderOffsets =
+        admin.listOffsets(requestOlderOffsets).all().get();
+Map<TopicPartition, RecordsToDelete> recordsToDelete = new HashMap<>();
+for (Map.Entry<TopicPartition, ListOffsetsResult.ListOffsetsResultInfo>  e:
+        olderOffsets.entrySet())
+    recordsToDelete.put(e.getKey(),
+            RecordsToDelete.beforeOffset(e.getValue().offset()));
+ admin.deleteRecords(recordsToDelete).all().get();
+```
 
 ## 领导者选举
 
@@ -296,7 +469,17 @@ Apache Kafka 协议支持的所有管理操作都直接在`KafkaAdminClient`中�
 
 该方法是异步的，这意味着即使在成功返回后，直到所有代理都意识到新状态并调用`describeTopics()`后，调用可能会返回不一致的结果。如果触发多个分区的领导者选举，可能会对一些分区成功，对另一些分区失败：
 
-[PRE13]
+```java
+Set<TopicPartition> electableTopics = new HashSet<>();
+electableTopics.add(new TopicPartition(TOPIC_NAME, 0));
+try {
+    admin.electLeaders(ElectionType.PREFERRED, electableTopics).all().get(); ①
+} catch (ExecutionException e) {
+    if (e.getCause() instanceof ElectionNotNeededException) {
+        System.out.println("All leaders are preferred already"); ②
+    }
+}
+```
 
 ①
 
@@ -312,7 +495,24 @@ Apache Kafka 协议支持的所有管理操作都直接在`KafkaAdminClient`中�
 
 在本例中，假设我们有一个 ID 为 0 的单个代理。我们的主题有几个分区，每个分区都有一个副本在这个代理上。添加新代理后，我们希望使用它来存储主题的一些副本。我们将以稍微不同的方式为主题中的每个分区分配副本：
 
-[PRE14]
+```java
+Map<TopicPartition, Optional<NewPartitionReassignment>> reassignment = new HashMap<>();
+reassignment.put(new TopicPartition(TOPIC_NAME, 0),
+        Optional.of(new NewPartitionReassignment(Arrays.asList(0,1)))); ①
+reassignment.put(new TopicPartition(TOPIC_NAME, 1),
+        Optional.of(new NewPartitionReassignment(Arrays.asList(1)))); ②
+reassignment.put(new TopicPartition(TOPIC_NAME, 2),
+        Optional.of(new NewPartitionReassignment(Arrays.asList(1,0)))); ③
+reassignment.put(new TopicPartition(TOPIC_NAME, 3), Optional.empty()); ④
+
+admin.alterPartitionReassignments(reassignment).all().get();
+
+System.out.println("currently reassigning: " +
+        admin.listPartitionReassignments().reassignments().get()); ⑤
+demoTopic = admin.describeTopics(TOPIC_LIST);
+topicDescription = demoTopic.values().get(TOPIC_NAME).get();
+System.out.println("Description of demo topic:" + topicDescription); ![6](img/6.png)
+```
 
 ①
 
@@ -348,7 +548,34 @@ Apache Kafka 提供了一个测试类`MockAdminClient`，您可以用任意数�
 
 为了演示如何使用`MockAdminClient`进行测试，让我们从实现一个类开始，该类实例化为一个管理客户端，并使用它来创建主题：
 
-[PRE15]
+```java
+public TopicCreator(AdminClient admin) {
+    this.admin = admin;
+}
+
+// Example of a method that will create a topic if its name starts with "test"
+public void maybeCreateTopic(String topicName)
+        throws ExecutionException, InterruptedException {
+    Collection<NewTopic> topics = new ArrayList<>();
+    topics.add(new NewTopic(topicName, 1, (short) 1));
+    if (topicName.toLowerCase().startsWith("test")) {
+        admin.createTopics(topics);
+
+        // alter configs just to demonstrate a point
+        ConfigResource configResource =
+                  new ConfigResource(ConfigResource.Type.TOPIC, topicName);
+        ConfigEntry compaction =
+                  new ConfigEntry(TopicConfig.CLEANUP_POLICY_CONFIG,
+                          TopicConfig.CLEANUP_POLICY_COMPACT);
+        Collection<AlterConfigOp> configOp = new ArrayList<AlterConfigOp>();
+        configOp.add(new AlterConfigOp(compaction, AlterConfigOp.OpType.SET));
+        Map<ConfigResource, Collection<AlterConfigOp>> alterConf =
+            new HashMap<>();
+        alterConf.put(configResource, configOp);
+        admin.incrementalAlterConfigs(alterConf).all().get();
+    }
+}
+```
 
 这里的逻辑并不复杂：如果主题名称以“test”开头，`maybeCreateTopic`将创建主题。我们还修改了主题配置，以便演示我们如何处理我们使用的方法在模拟客户端中未实现的情况。
 
@@ -358,7 +585,20 @@ Apache Kafka 提供了一个测试类`MockAdminClient`，您可以用任意数�
 
 我们将通过实例化我们的模拟客户端来开始测试：
 
-[PRE16]
+```java
+@Before
+public void setUp() {
+    Node broker = new Node(0,"localhost",9092);
+    this.admin = spy(new MockAdminClient(Collections.singletonList(broker),
+        broker)); ①
+
+    // without this, the tests will throw
+    // `java.lang.UnsupportedOperationException: Not implemented yet`
+    AlterConfigsResult emptyResult = mock(AlterConfigsResult.class);
+    doReturn(KafkaFuture.completedFuture(null)).when(emptyResult).all();
+    doReturn(emptyResult).when(admin).incrementalAlterConfigs(any()); ②
+}
+```
 
 ①
 
@@ -370,7 +610,22 @@ Apache Kafka 提供了一个测试类`MockAdminClient`，您可以用任意数�
 
 现在我们有了一个适当的虚假 AdminClient，我们可以使用它来测试`maybeCreateTopic()`方法是否正常工作：
 
-[PRE17]
+```java
+@Test
+public void testCreateTestTopic()
+        throws ExecutionException, InterruptedException {
+    TopicCreator tc = new TopicCreator(admin);
+    tc.maybeCreateTopic("test.is.a.test.topic");
+    verify(admin, times(1)).createTopics(any()); ①
+}
+
+@Test
+public void testNotTopic() throws ExecutionException, InterruptedException {
+    TopicCreator tc = new TopicCreator(admin);
+    tc.maybeCreateTopic("not.a.test");
+    verify(admin, never()).createTopics(any()); ②
+}
+```
 
 ①
 
@@ -382,7 +637,15 @@ Apache Kafka 提供了一个测试类`MockAdminClient`，您可以用任意数�
 
 最后一点说明：Apache Kafka 发布了`MockAdminClient`在一个测试 jar 中，所以确保你的*pom.xml*包含一个测试依赖：
 
-[PRE18]
+```java
+<dependency>
+    <groupId>org.apache.kafka</groupId>
+    <artifactId>kafka-clients</artifactId>
+    <version>2.5.0</version>
+    <classifier>test</classifier>
+    <scope>test</scope>
+</dependency>
+```
 
 # 总结
 

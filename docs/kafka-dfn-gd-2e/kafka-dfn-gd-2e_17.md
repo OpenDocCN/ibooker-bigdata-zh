@@ -12,7 +12,16 @@ Apache Kafka 主要是一个 Java 应用程序，因此应该能够在任何可�
 
 要安装 WSL，请按照 Microsoft Developer Network 上的说明进行操作[“什么是 Windows 子系统？”页面](https://oreil.ly/dULqm)。完成后，您需要使用`apt`安装 JDK（假设您已经安装了 WSL 的 Ubuntu 系统包）：
 
-[PRE0]
+```java
+$ sudo apt install openjdk-16-jre-headless
+[sudo] password for username:
+Reading package lists... Done
+Building dependency tree
+Reading state information... Done
+[...]
+done.
+$
+```
 
 安装完 JDK 后，您可以按照第二章中的说明安装 Apache Kafka。
 
@@ -46,11 +55,25 @@ Apache Kafka 主要是一个 Java 应用程序，因此应该能够在任何可�
 
 在 Windows 下运行 ZooKeeper 和 Kafka 有点不同，因为您必须使用专为 Windows 设计的批处理文件，而不是其他平台的 shell 脚本。这些批处理文件也不支持将应用程序放入后台运行，因此您需要为每个应用程序使用单独的 shell。首先启动 ZooKeeper：
 
-[PRE1]
+```java
+PS C:\> cd kafka_2.13-2.8.0
+PS C:\kafka_2.13-2.8.0> bin\windows\zookeeper-server-start.bat C:\kafka_2.13-2.8.0\config\zookeeper.properties
+[2021-07-18 17:37:12,917] INFO Reading configuration from: C:\kafka_2.13-2.8.0\config\zookeeper.properties (org.apache.zookeeper.server.quorum.QuorumPeerConfig)
+[...]
+[2021-07-18 17:37:13,135] INFO PrepRequestProcessor (sid:0) started, reconfigEnabled=false (org.apache.zookeeper.server.PrepRequestProcessor)
+[2021-07-18 17:37:13,144] INFO Using checkIntervalMs=60000 maxPerMinute=10000 (org.apache.zookeeper.server.ContainerManager)
+```
 
 一旦 ZooKeeper 运行，您可以打开另一个窗口启动 Kafka：
 
-[PRE2]
+```java
+PS C:\> cd kafka_2.13-2.8.0
+PS C:\kafka_2.13-2.8.0> .\bin\windows\kafka-server-start.bat C:\kafka_2.13-2.8.0\config\server.properties
+[2021-07-18 17:39:46,098] INFO Registered kafka:type=kafka.Log4jController MBean (kafka.utils.Log4jControllerRegistration$)
+[...]
+[2021-07-18 17:39:47,918] INFO [KafkaServer id=0] started (kafka.server.KafkaServer)
+[2021-07-18 17:39:48,009] INFO [broker-0-to-controller-send-thread]: Recorded new controller, from now on will use broker 192.168.0.2:9092 (id: 0 rack: null) (kafka.server.BrokerToControllerRequestThread)
+```
 
 # 在 macOS 上安装
 
@@ -62,7 +85,16 @@ macOS 运行在 Darwin 上，这是一个 Unix 操作系统，部分源自 FreeB
 
 如果您尚未安装 Homebrew，请首先按照[安装页面](https://oreil.ly/ZVEvc)上的说明进行安装。然后您可以安装 Kafka 本身。Homebrew 软件包管理器将确保您首先安装所有依赖项，包括 Java：
 
-[PRE3]
+```java
+$ brew install kafka
+==> Installing dependencies for kafka: openjdk, openssl@1.1 and zookeeper
+==> Installing kafka dependency: openjdk
+==> Pouring openjdk--16.0.1.big_sur.bottle.tar.gz
+[...]
+==> Summary
+/usr/local/Cellar/kafka/2.8.0: 200 files, 68.2MB
+$
+```
 
 Homebrew 将在*/usr/local/Cellar*下安装 Kafka，但文件将链接到其他目录中：
 
@@ -76,7 +108,17 @@ Homebrew 将在*/usr/local/Cellar*下安装 Kafka，但文件将链接到其他�
 
 安装完成后，您可以启动 ZooKeeper 和 Kafka（此示例在前台启动 Kafka）：
 
-[PRE4]
+```java
+$ /usr/local/bin/zkServer start
+ZooKeeper JMX enabled by default
+Using config: /usr/local/etc/zookeeper/zoo.cfg
+Starting zookeeper ... STARTED
+$ /usr/local/bin/kafka-server-start /usr/local/etc/kafka/server.properties
+[2021-07-18 17:52:15,688] INFO Registered kafka:type=kafka.Log4jController MBean (kafka.utils.Log4jControllerRegistration$)
+[...]
+[2021-07-18 17:52:18,187] INFO [KafkaServer id=0] started (kafka.server.KafkaServer)
+[2021-07-18 17:52:18,232] INFO [broker-0-to-controller-send-thread]: Recorded new controller, from now on will use broker 192.168.0.2:9092 (id: 0 rack: null) (kafka.server.BrokerToControllerRequestThread)
+```
 
 ## 手动安装
 
@@ -84,4 +126,15 @@ Homebrew 将在*/usr/local/Cellar*下安装 Kafka，但文件将链接到其他�
 
 启动 ZooKeeper 和 Kafka 看起来就像在 Linux 上启动它们一样，尽管您需要确保首先设置`JAVA_HOME`目录：
 
-[PRE5]
+```java
+$ export JAVA_HOME=`/usr/libexec/java_home -v 16.0.1`
+$ echo $JAVA_HOME
+/Library/Java/JavaVirtualMachines/jdk-16.0.1.jdk/Contents/Home
+
+$ /usr/local/kafka_2.13-2.8.0/bin/zookeeper-server-start.sh -daemon /usr/local/kafka_2.13-2.8.0/config/zookeeper.properties
+$ /usr/local/kafka_2.13-2.8.0/bin/kafka-server-start.sh /usr/local/kafka_2.13-2.8.0/config/server.properties
+[2021-07-18 18:02:34,724] INFO Registered kafka:type=kafka.Log4jController MBean (kafka.utils.Log4jControllerRegistration$)
+[...]
+[2021-07-18 18:02:36,873] INFO [KafkaServer id=0] started (kafka.server.KafkaServer)
+[2021-07-18 18:02:36,915] INFO [broker-0-to-controller-send-thread]: Recorded new controller, from now on will use broker 192.168.0.2:9092 (id: 0 rack: null) (kafka.server.BrokerToControllerRequestThread)((("macOS, installing Kafka on", startref="ix_macOS")))((("operating systems", "other than Linux, installing Kafka on", startref="ix_OSinstall")))
+```

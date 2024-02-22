@@ -208,7 +208,48 @@ Kafka 在这种情况下提供的保证类似于 JMS 事务提供的保证，但
 
 但是，如果我们想要在不使用 Kafka Streams 的情况下实现精确一次的保证呢？在这种情况下，我们将直接使用事务性 API。以下是一个显示这将如何工作的片段。在 Apache Kafka GitHub 中有一个完整的示例，其中包括一个[演示驱动程序](https://oreil.ly/45dE4)和一个[简单的精确一次处理器](https://oreil.ly/CrXHU)，它们在单独的线程中运行：
 
-[PRE0]
+```java
+Properties producerProps = new Properties();
+producerProps.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, "localhost:9092");
+producerProps.put(ProducerConfig.CLIENT_ID_CONFIG, "DemoProducer");
+producerProps.put(ProducerConfig.TRANSACTIONAL_ID_CONFIG, transactionalId); ①
+
+producer = new KafkaProducer<>(producerProps);
+
+Properties consumerProps = new Properties();
+consumerProps.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, "localhost:9092");
+consumerProps.put(ConsumerConfig.GROUP_ID_CONFIG, groupId);
+props.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, "false"); ②
+consumerProps.put(ConsumerConfig.ISOLATION_LEVEL_CONFIG, "read_committed"); ③
+
+consumer = new KafkaConsumer<>(consumerProps);
+
+producer.initTransactions(); ④
+
+consumer.subscribe(Collections.singleton(inputTopic)); ⑤
+
+while (true) {
+  try {
+    ConsumerRecords<Integer, String> records =
+      consumer.poll(Duration.ofMillis(200));
+    if (records.count() > 0) {
+      producer.beginTransaction(); ![6](img/6.png)
+      for (ConsumerRecord<Integer, String> record : records) {
+        ProducerRecord<Integer, String> customizedRecord = transform(record); ![7](img/7.png)
+        producer.send(customizedRecord);
+      }
+      Map<TopicPartition, OffsetAndMetadata> offsets = consumerOffsets();
+      producer.sendOffsetsToTransaction(offsets, consumer.groupMetadata()); ![8](img/8.png)
+      producer.commitTransaction(); ![9](img/9.png)
+    }
+  } catch (ProducerFencedException|InvalidProducerEpochException e) { ![10](img/10.png)
+    throw new KafkaException(String.format(
+      "The transactional.id %s is used by another process", transactionalId));
+  } catch (KafkaException e) {
+    producer.abortTransaction(); ![11](img/11.png)
+    resetToLastCommittedPositions(consumer);
+  }}
+```
 
 ① (#co_exactly_once_semantics_CO1-1)
 

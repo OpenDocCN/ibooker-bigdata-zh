@@ -104,7 +104,18 @@ Kafka 有一些内置的分区分配策略，我们将在配置部分更深入�
 
 以下代码片段显示了如何创建`KafkaConsumer`：
 
-[PRE0]
+```java
+Properties props = new Properties();
+props.put("bootstrap.servers", "broker1:9092,broker2:9092");
+props.put("group.id", "CountryCounter");
+props.put("key.deserializer",
+    "org.apache.kafka.common.serialization.StringDeserializer");
+props.put("value.deserializer",
+    "org.apache.kafka.common.serialization.StringDeserializer");
+
+KafkaConsumer<String, String> consumer =
+    new KafkaConsumer<String, String>(props);
+```
 
 如果您阅读过第三章中关于创建生产者的内容，那么您在这里看到的大部分内容应该是熟悉的。我们假设我们消费的记录将作为记录的键和值都是`String`对象。这里唯一的新属性是`group.id`，它是这个消费者所属的消费者组的名称。
 
@@ -112,7 +123,9 @@ Kafka 有一些内置的分区分配策略，我们将在配置部分更深入�
 
 创建消费者后，下一步是订阅一个或多个主题。`subscribe()`方法接受一个主题列表作为参数，所以使用起来非常简单：
 
-[PRE1]
+```java
+consumer.subscribe(Collections.singletonList("customerCountries")); ①
+```
 
 ①
 
@@ -122,7 +135,9 @@ Kafka 有一些内置的分区分配策略，我们将在配置部分更深入�
 
 例如，要订阅所有测试主题，我们可以调用：
 
-[PRE2]
+```java
+consumer.subscribe(Pattern.compile("test.*"));
+```
 
 ###### 警告
 
@@ -132,7 +147,28 @@ Kafka 有一些内置的分区分配策略，我们将在配置部分更深入�
 
 消费者 API 的核心是一个简单的循环，用于从服务器轮询更多数据。消费者的主体将如下所示：
 
-[PRE3]
+```java
+Duration timeout = Duration.ofMillis(100);
+
+while (true) { ①
+    ConsumerRecords<String, String> records = consumer.poll(timeout); ②
+
+    for (ConsumerRecord<String, String> record : records) { ③
+        System.out.printf("topic = %s, partition = %d, offset = %d, " +
+                        "customer = %s, country = %s\n",
+        record.topic(), record.partition(), record.offset(),
+                record.key(), record.value());
+        int updatedCount = 1;
+        if (custCountryMap.containsKey(record.value())) {
+            updatedCount = custCountryMap.get(record.value()) + 1;
+        }
+        custCountryMap.put(record.value(), updatedCount);
+
+        JSONObject json = new JSONObject(custCountryMap);
+        System.out.println(json.toString()); ④
+    }
+}
+```
 
 ①
 
@@ -304,7 +340,24 @@ Sticky
 
 以下是我们如何使用`commitSync`在完成处理最新一批消息后提交偏移量的方式：
 
-[PRE4]
+```java
+Duration timeout = Duration.ofMillis(100);
+
+while (true) {
+    ConsumerRecords<String, String> records = consumer.poll(timeout);
+    for (ConsumerRecord<String, String> record : records) {
+        System.out.printf("topic = %s, partition = %d, offset =
+            %d, customer = %s, country = %s\n",
+            record.topic(), record.partition(),
+            record.offset(), record.key(), record.value()); ①
+    }
+    try {
+        consumer.commitSync(); ②
+    } catch (CommitFailedException e) {
+        log.error("commit failed", e) ③
+    }
+}
+```
 
 ①
 
@@ -324,7 +377,20 @@ Sticky
 
 另一个选择是异步提交 API。我们不等待代理响应提交，只是发送请求并继续进行：
 
-[PRE5]
+```java
+Duration timeout = Duration.ofMillis(100);
+
+while (true) {
+    ConsumerRecords<String, String> records = consumer.poll(timeout);
+    for (ConsumerRecord<String, String> record : records) {
+        System.out.printf("topic = %s, partition = %s,
+            offset = %d, customer = %s, country = %s\n",
+            record.topic(), record.partition(), record.offset(),
+            record.key(), record.value());
+    }
+    consumer.commitAsync(); ①
+}
+```
 
 ①
 
@@ -334,7 +400,26 @@ Sticky
 
 我们提到这个复杂性和正确的提交顺序的重要性，因为`commitAsync()`还提供了一个选项，可以传递一个回调，当代理响应时将触发该回调。通常使用回调来记录提交错误或在指标中计数，但如果要使用回调进行重试，就需要注意提交顺序的问题。
 
-[PRE6]
+```java
+Duration timeout = Duration.ofMillis(100);
+
+while (true) {
+    ConsumerRecords<String, String> records = consumer.poll(timeout);
+    for (ConsumerRecord<String, String> record : records) {
+        System.out.printf("topic = %s, partition = %s,
+        offset = %d, customer = %s, country = %s\n",
+        record.topic(), record.partition(), record.offset(),
+        record.key(), record.value());
+    }
+    consumer.commitAsync(new OffsetCommitCallback() {
+        public void onComplete(Map<TopicPartition,
+        OffsetAndMetadata> offsets, Exception e) {
+            if (e != null)
+                log.error("Commit failed for offsets {}", offsets, e);
+        }
+    }); ①
+}
+```
 
 ①
 
@@ -350,7 +435,27 @@ Sticky
 
 因此，一个常见的模式是在关闭之前将`commitAsync()`与`commitSync()`结合在一起。下面是它的工作原理（当我们讨论重新平衡监听器时，我们将讨论如何在重新平衡之前提交）：
 
-[PRE7]
+```java
+Duration timeout = Duration.ofMillis(100);
+
+try {
+    while (!closing) {
+        ConsumerRecords<String, String> records = consumer.poll(timeout);
+        for (ConsumerRecord<String, String> record : records) {
+            System.out.printf("topic = %s, partition = %s, offset = %d,
+                customer = %s, country = %s\n",
+                record.topic(), record.partition(),
+                record.offset(), record.key(), record.value());
+        }
+        consumer.commitAsync(); ①
+    }
+    consumer.commitSync(); ②
+} catch (Exception e) {
+    log.error("Unexpected error", e);
+} finally {
+        consumer.close();
+}
+```
 
 ①
 
@@ -368,7 +473,30 @@ Sticky
 
 这是提交特定偏移量的样子：
 
-[PRE8]
+```java
+private Map<TopicPartition, OffsetAndMetadata> currentOffsets =
+    new HashMap<>(); ①
+int count = 0;
+
+....
+Duration timeout = Duration.ofMillis(100);
+
+while (true) {
+    ConsumerRecords<String, String> records = consumer.poll(timeout);
+    for (ConsumerRecord<String, String> record : records) {
+        System.out.printf("topic = %s, partition = %s, offset = %d,
+            customer = %s, country = %s\n",
+            record.topic(), record.partition(), record.offset(),
+            record.key(), record.value()); ②
+        currentOffsets.put(
+            new TopicPartition(record.topic(), record.partition()),
+            new OffsetAndMetadata(record.offset()+1, "no metadata")); ③
+        if (count % 1000 == 0)   ④
+            consumer.commitAsync(currentOffsets, null); ⑤
+        count++;
+    }
+}
+```
 
 ①
 
@@ -424,7 +552,52 @@ Sticky
 
 这个例子将展示如何使用`onPartitionsRevoked()`在失去分区所有权之前提交偏移量：
 
-[PRE9]
+```java
+private Map<TopicPartition, OffsetAndMetadata> currentOffsets =
+    new HashMap<>();
+Duration timeout = Duration.ofMillis(100);
+
+private class HandleRebalance implements ConsumerRebalanceListener { ①
+    public void onPartitionsAssigned(Collection<TopicPartition>
+        partitions) { ②
+    }
+
+    public void onPartitionsRevoked(Collection<TopicPartition> partitions) {
+        System.out.println("Lost partitions in rebalance. " +
+            "Committing current offsets:" + currentOffsets);
+        consumer.commitSync(currentOffsets); ③
+    }
+}
+
+try {
+    consumer.subscribe(topics, new HandleRebalance()); ④
+
+    while (true) {
+        ConsumerRecords<String, String> records = consumer.poll(timeout);
+        for (ConsumerRecord<String, String> record : records) {
+            System.out.printf("topic = %s, partition = %s, offset = %d,
+                 customer = %s, country = %s\n",
+                 record.topic(), record.partition(), record.offset(),
+                 record.key(), record.value());
+             currentOffsets.put(
+                 new TopicPartition(record.topic(), record.partition()),
+                 new OffsetAndMetadata(record.offset()+1, null));
+        }
+        consumer.commitAsync(currentOffsets, null);
+    }
+} catch (WakeupException e) {
+    // ignore, we're closing
+} catch (Exception e) {
+    log.error("Unexpected error", e);
+} finally {
+    try {
+        consumer.commitSync(currentOffsets);
+    } finally {
+        consumer.close();
+        System.out.println("Closed consumer and we are done");
+    }
+}
+```
 
 ①
 
@@ -452,7 +625,19 @@ Kafka API 还允许您寻找特定的偏移量。这种能力可以以各种方�
 
 以下是如何将所有分区的当前偏移量设置为特定时间点产生的记录的快速示例：
 
-[PRE10]
+```java
+Long oneHourEarlier = Instant.now().atZone(ZoneId.systemDefault())
+          .minusHours(1).toEpochSecond();
+Map<TopicPartition, Long> partitionTimestampMap = consumer.assignment()
+        .stream()
+        .collect(Collectors.toMap(tp -> tp, tp -> oneHourEarlier)); ①
+Map<TopicPartition, OffsetAndTimestamp> offsetMap
+        = consumer.offsetsForTimes(partitionTimestampMap); ②
+
+for(Map.Entry<TopicPartition,OffsetAndTimestamp> entry: offsetMap.entrySet()) {
+    consumer.seek(entry.getKey(), entry.getValue().offset()); ③
+}
+```
 
 ①
 
@@ -474,7 +659,45 @@ Kafka API 还允许您寻找特定的偏移量。这种能力可以以各种方�
 
 如果消费者在主应用程序线程中运行，退出代码将如下所示。这个例子有点截断，但你可以在[GitHub](http://bit.ly/2u47e9A)上查看完整的例子：
 
-[PRE11]
+```java
+Runtime.getRuntime().addShutdownHook(new Thread() {
+    public void run() {
+        System.out.println("Starting exit...");
+        consumer.wakeup(); ①
+        try {
+            mainThread.join();
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+    }
+});
+
+...
+Duration timeout = Duration.ofMillis(10000); ②
+
+try {
+    // looping until ctrl-c, the shutdown hook will cleanup on exit
+    while (true) {
+        ConsumerRecords<String, String> records =
+            movingAvg.consumer.poll(timeout);
+        System.out.println(System.currentTimeMillis() +
+            "--  waiting for data...");
+        for (ConsumerRecord<String, String> record : records) {
+            System.out.printf("offset = %d, key = %s, value = %s\n",
+                record.offset(), record.key(), record.value());
+        }
+        for (TopicPartition tp: consumer.assignment())
+            System.out.println("Committing offset at position:" +
+                consumer.position(tp));
+        movingAvg.consumer.commitSync();
+    }
+} catch (WakeupException e) {
+    // ignore for shutdown ③
+} finally {
+    consumer.close(); ④
+    System.out.println("Closed consumer and we are done");
+}
+```
 
 ①
 
@@ -506,11 +729,75 @@ Kafka API 还允许您寻找特定的偏移量。这种能力可以以各种方�
 
 让我们使用在第三章中序列化的相同自定义对象，并为其编写一个反序列化器：
 
-[PRE12]
+```java
+public class Customer {
+    private int customerID;
+    private String customerName;
+
+    public Customer(int ID, String name) {
+        this.customerID = ID;
+        this.customerName = name;
+    }
+
+    public int getID() {
+        return customerID;
+    }
+
+    public String getName() {
+        return customerName;
+    }
+}
+```
 
 自定义反序列化器将如下所示：
 
-[PRE13]
+```java
+import org.apache.kafka.common.errors.SerializationException;
+
+import java.nio.ByteBuffer;
+import java.util.Map;
+
+public class CustomerDeserializer implements Deserializer<Customer> { ①
+
+    @Override
+    public void configure(Map configs, boolean isKey) {
+        // nothing to configure
+    }
+
+    @Override
+    public Customer deserialize(String topic, byte[] data) {
+        int id;
+        int nameSize;
+        String name;
+
+        try {
+            if (data == null)
+                return null;
+            if (data.length < 8)
+                throw new SerializationException("Size of data received " +
+                    "by deserializer is shorter than expected");
+
+            ByteBuffer buffer = ByteBuffer.wrap(data);
+            id = buffer.getInt();
+            nameSize = buffer.getInt();
+
+            byte[] nameBytes = new byte[nameSize];
+            buffer.get(nameBytes);
+            name = new String(nameBytes, "UTF-8");
+
+            return new Customer(id, name); ②
+
+        } catch (Exception e) {
+  	        throw new SerializationException("Error when deserializing " +   	        "byte[] to Customer " + e);
+        }
+    }
+
+    @Override
+    public void close() {
+        // nothing to close
+    }
+}
+```
 
 ①
 
@@ -522,7 +809,31 @@ Kafka API 还允许您寻找特定的偏移量。这种能力可以以各种方�
 
 使用此反序列化器的消费者代码将类似于以下示例：
 
-[PRE14]
+```java
+Duration timeout = Duration.ofMillis(100);
+Properties props = new Properties();
+props.put("bootstrap.servers", "broker1:9092,broker2:9092");
+props.put("group.id", "CountryCounter");
+props.put("key.deserializer",
+    "org.apache.kafka.common.serialization.StringDeserializer");
+props.put("value.deserializer",
+    CustomerDeserializer.class.getName());
+
+KafkaConsumer<String, Customer> consumer =
+    new KafkaConsumer<>(props);
+
+consumer.subscribe(Collections.singletonList("customerCountries"))
+
+while (true) {
+    ConsumerRecords<String, Customer> records = consumer.poll(timeout);
+    for (ConsumerRecord<String, Customer> record : records) {
+        System.out.println("current customer Id: " +
+            record.value().getID() + " and
+            current customer name: " +  record.value().getName());
+    }
+    consumer.commitSync();
+}
+```
 
 再次强调，不建议实现自定义序列化器和反序列化器。它会紧密耦合生产者和消费者，并且容易出错。更好的解决方案是使用标准消息格式，如 JSON、Thrift、Protobuf 或 Avro。现在我们将看看如何在 Kafka 消费者中使用 Avro 反序列化器。有关 Apache Avro、其模式和模式兼容性能力的背景，请参阅第三章。
 
@@ -530,7 +841,34 @@ Kafka API 还允许您寻找特定的偏移量。这种能力可以以各种方�
 
 假设我们正在使用在第三章中展示的 Avro 中的`Customer`类的实现。为了从 Kafka 中消费这些对象，您需要实现类似于以下的消费应用程序：
 
-[PRE15]
+```java
+Duration timeout = Duration.ofMillis(100);
+Properties props = new Properties();
+props.put("bootstrap.servers", "broker1:9092,broker2:9092");
+props.put("group.id", "CountryCounter");
+props.put("key.deserializer",
+    "org.apache.kafka.common.serialization.StringDeserializer");
+props.put("value.deserializer",
+    "io.confluent.kafka.serializers.KafkaAvroDeserializer"); ①
+props.put("specific.avro.reader","true");
+props.put("schema.registry.url", schemaUrl); ②
+String topic = "customerContacts"
+
+KafkaConsumer<String, Customer> consumer = new KafkaConsumer<>(props);
+consumer.subscribe(Collections.singletonList(topic));
+
+System.out.println("Reading topic:" + topic);
+
+while (true) {
+    ConsumerRecords<String, Customer> records = consumer.poll(timeout); ③
+
+    for (ConsumerRecord<String, Customer> record: records) {
+        System.out.println("Current customer name is: " +
+            record.value().getName()); ④
+    }
+    consumer.commitSync();
+}
+```
 
 ①
 
@@ -556,7 +894,30 @@ Kafka API 还允许您寻找特定的偏移量。这种能力可以以各种方�
 
 以下是一个消费者如何分配给自己特定主题的所有分区并从中消费的示例：
 
-[PRE16]
+```java
+Duration timeout = Duration.ofMillis(100);
+List<PartitionInfo> partitionInfos = null;
+partitionInfos = consumer.partitionsFor("topic"); ①
+
+if (partitionInfos != null) {
+    for (PartitionInfo partition : partitionInfos)
+        partitions.add(new TopicPartition(partition.topic(),
+            partition.partition()));
+    consumer.assign(partitions); ②
+
+    while (true) {
+        ConsumerRecords<String, String> records = consumer.poll(timeout);
+
+        for (ConsumerRecord<String, String> record: records) {
+            System.out.printf("topic = %s, partition = %s, offset = %d,
+                customer = %s, country = %s\n",
+                record.topic(), record.partition(), record.offset(),
+                record.key(), record.value());
+        }
+        consumer.commitSync();
+    }
+}
+```
 
 ①
 
