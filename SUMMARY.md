@@ -1,2 +1,7 @@
-+   [流式系统](docs/st-sys/README.md)
++   [亚马孙 Redshift 权威指南](docs/amzn-rdsft-defgd/README.md)
 +   [Kafka 权威指南第二版](docs/kafka-dfn-gd-2e/README.md)
++   [Spark 学习指南](docs/lrn-spk/README.md)
++   [精通 R Spark](docs/ms-spk-r/README.md)
++   [Flink 流式处理](docs/st-proc-flink/README.md)
++   [Spark 流式处理](docs/st-proc-spk/README.md)
++   [流式系统](docs/st-sys/README.md)
